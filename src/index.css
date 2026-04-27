@@ -1,0 +1,54 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  
+  --color-finance-green: #10b981;
+  --color-finance-red: #ef4444;
+  --color-finance-yellow: #f59e0b;
+  --color-finance-blue: #2563eb;
+  --color-finance-slate-bg: #F1F5F9;
+  
+  --radius-2xl: 1rem;
+}
+
+@layer base {
+  body {
+    @apply text-slate-800 font-sans antialiased;
+    background-image: url('img/Gemini_Generated_Image_s2wbins2wbins2wb.png');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+  }
+  
+  #root {
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  .card-minimal {
+    @apply bg-neutral-600 rounded-2xl shadow-sm p-6 transition-all;
+  }
+  
+  .btn-minimal-primary {
+    @apply bg-finance-blue hover:bg-green-900 text-white px-5 py-2.5 rounded-lg font-medium shadow-sm transition-all active:scale-[0.98];
+  }
+
+  .sidebar-item {
+    @apply flex items-center px-6 py-4 cursor-pointer transition-all duration-200 text-white/70 hover:bg-white/10 hover:text-white rounded-lg mx-2;}
+
+  .sidebar-item-active {
+    @apply bg-white/15 text-white border-l-4 border-green-400 font-semibold;
+  }
+
+  .progress-bar-bg {
+    @apply bg-slate-100 rounded-full h-2 w-full;
+  }
+
+  .progress-fill {
+    @apply rounded-full h-2;
+  }
+}
