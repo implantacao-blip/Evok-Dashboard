@@ -7,6 +7,10 @@ import { LoginPage } from './LoginPage';
 import { TransactionCategory, TransactionType } from './types';
 import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar, Cell, AreaChart, Area } from 'recharts';
 
+// IMPORTANDO AS IMAGENS AQUI:
+import evokLogo from './assets/evok_logo.png';
+import bgImage from './assets/background.png';
+
 const formatCurrency = (val: number) => {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 };
@@ -63,7 +67,7 @@ export default function App() {
         <div className="p-8 flex items-center gap-3">
           <div className="w-40 h-14 rounded-xl overflow-hidden shadow-sm group transition-transform hover:scale-105 active:scale-95 flex-shrink-0">
             <img
-              src="public/images/evok_logo.png"
+              src={evokLogo}
               alt="Logo Evok"
               className="w-full h-full object-cover"
             />
@@ -126,7 +130,7 @@ export default function App() {
         <header className="-mx-4 -mt-4 md:-mx-8 md:-mt-8">
           <div 
             className="px-4 pt-12 pb-8 md:px-8 md:pt-12 md:pb-10 bg-cover bg-center"
-            style={{ backgroundImage: "url('/images/background.png')" }}
+            style={{ backgroundImage: `url(${bgImage})` }}
           >
             <h2 className="text-4xl font-bold text-white">
               {activeTab === 'dashboard' ? 'Visão Geral' :
