@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useAuth } from './useAuth';
 import { Mail, Lock, LogOut } from 'lucide-react';
 
+import evokLogo from './assets/evok_logo.png';
+
 export function LoginPage() {
   const { login, signup, logout, user } = useAuth();
   const [email, setEmail] = useState('');
@@ -34,7 +36,7 @@ export function LoginPage() {
         <div className="text-center">
           <div className="mb-8">
             <img
-              src="img/LOGO-EVOK-EF01.png"
+              src={evokLogo}
               alt="Logo"
               className="w-40 mx-auto"
             />
