@@ -63,7 +63,7 @@ export default function App() {
         <div className="p-8 flex items-center gap-3">
           <div className="w-40 h-14 rounded-xl overflow-hidden shadow-sm group transition-transform hover:scale-105 active:scale-95 flex-shrink-0">
             <img
-              src="img/LOGO-EVOK-EF01.png"
+              src="public/images/evok_logo.png"
               alt="Logo Evok"
               className="w-full h-full object-cover"
             />
@@ -126,7 +126,7 @@ export default function App() {
         <header className="-mx-4 -mt-4 md:-mx-8 md:-mt-8">
           <div 
             className="px-4 pt-12 pb-8 md:px-8 md:pt-12 md:pb-10 bg-cover bg-center"
-            style={{ backgroundImage: "url(img/Gemini_Generated_Image_s2wbins2wbins2wb.png)" }}
+            style={{ backgroundImage: "url('/images/background.png')" }}
           >
             <h2 className="text-4xl font-bold text-white">
               {activeTab === 'dashboard' ? 'Visão Geral' :
