@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Wallet, Target, LayoutDashboard, History, Calendar, Menu, X, Pencil, ArrowLeft, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Wallet, Target, LayoutDashboard, History, Calendar, Menu, X, Pencil, ArrowLeft, ChevronRight, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useFinance } from './useFinance';
+import { useAuth } from './useAuth';
+import { LoginPage } from './LoginPage';
 import { TransactionCategory, TransactionType } from './types';
 import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar, Cell, AreaChart, Area } from 'recharts';
 
@@ -16,6 +18,21 @@ export default function App() {
   const [tempIncome, setTempIncome] = useState('');
   const [visibleTransactions, setVisibleTransactions] = useState(5);
   const finance = useFinance();
+  const { user, logout, loading } = useAuth();
+
+  // Show loading screen while checking authentication
+  if (loading) {
+    return (
+      <div className="w-full h-screen bg-zinc-800 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+      </div>
+    );
+  }
+
+  // Show login page if user is not authenticated
+  if (!user) {
+    return <LoginPage />;
+  }
 
   const handleIncomeSubmit = () => {
     if (tempIncome !== '' && !isNaN(parseFloat(tempIncome))) {
@@ -80,12 +97,19 @@ export default function App() {
           />
         </nav>
 
-        <div className="p-6 mt-auto border-t border-black">
-          <div className="bg-green-600 rounded-xl p-4">
+        <div className="p-6 mt-auto border-t border-black space-y-4">
+          <div className="bg-green-700 rounded-xl p-4">
             <p className="text-[10px] text-white font-bold uppercase tracking-wider mb-1">Saldo Total</p>
             <p className={`text-xl font-bold ${finance.totalIncome - finance.totalExpense >= 0 ? 'text-white' : 'text-finance-red'}`}>
               {formatCurrency(finance.totalIncome - finance.totalExpense)}</p>
           </div>
+          <button
+            onClick={() => logout()}
+            className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition"
+          >
+            <LogOut size={18} />
+            Sair
+          </button>
         </div>
       </aside>
 
@@ -598,13 +622,13 @@ function TransactionForm({ onAdd, goals }: { onAdd: (t: any) => void, goals: any
         <div className="space-y-2">
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Descrição</label>
           <input type="text" value={description} onChange={e => setDescription(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:bg-white transition-all" 
+            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-green-500 focus:bg-white transition-all" 
             placeholder="Ex: Jantar Japonês" />
         </div>
         <div className="space-y-2">
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Valor</label>
           <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:bg-white transition-all" 
+            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-green-500 focus:bg-white transition-all" 
             placeholder="R$ 0,00" />
         </div>
         <div className="space-y-2">
