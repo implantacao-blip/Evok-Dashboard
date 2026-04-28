@@ -1,0 +1,28 @@
+# Firebase
+.firebase/
+*.serviceAccountKey.json
+*.key.json
+firebase-debug.log
+
+# Cloudflare / Wrangler
+.dev.vars
+.wrangler/
+
+# IDE e sistemas
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Arquivos de build locais
+dist-ssr/
+*.local
+
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
