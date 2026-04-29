@@ -299,13 +299,13 @@ export default function App() {
                       {finance.goals.slice(0, 2).map(goal => (
                         <div key={goal.id} className="space-y-2">
                           <div className="flex justify-between text-sm">
-                            <span className="text-slate-600 font-medium">{goal.name}</span>
-                            <span className="text-slate-800 font-bold">{((goal.currentAmount / goal.targetAmount) * 100).toFixed(0)}%</span>
+                            <span className="text-white font-medium">{goal.name}</span>
+                            <span className="text-slate-300 font-bold">{((goal.currentAmount / goal.targetAmount) * 100).toFixed(0)}%</span>
                           </div>
                           <div className="progress-bar-bg">
                             <div className="progress-fill bg-finance-blue" style={{ width: `${Math.min((goal.currentAmount / goal.targetAmount) * 100, 100)}%` }}></div>
                           </div>
-                          <p className="text-[10px] text-slate-400 font-mono">Acumulado: {formatCurrency(goal.currentAmount)} de {formatCurrency(goal.targetAmount)}</p>
+                          <p className="text-[12px] text-slate-400 font-mono">Acumulado: {formatCurrency(goal.currentAmount)} de {formatCurrency(goal.targetAmount)}</p>
                         </div>
                       ))}
                       {finance.goals.length === 0 && <p className="text-xs text-slate-300 italic">Sem metas registradas.</p>}
@@ -868,14 +868,14 @@ function YearlyManager({ transactions, onAddTransaction, onDeleteTransaction, go
           {monthlyTransactions.map(t => (
             <div key={t.id} className="p-4 flex justify-between items-center hover:bg-slate-50/50 transition-colors">
               <div>
-                <p className="font-bold text-slate-700">{t.description}</p>
+                <p className="font-bold text-white">{t.description}</p>
                 <div className="flex gap-2 items-center mt-1">
-                  <span className="text-[10px] font-mono text-slate-400">{new Date(t.date + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
+                  <span className="text-[10px] font-mono text-slate-200">{new Date(t.date + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
                   <CategoryBadge category={t.category} isType={t.type === 'Entrada' ? 'Entrada' : undefined} />
                 </div>
               </div>
               <div className="flex items-center gap-4">
-                <div className={`text-right font-mono font-bold ${t.type === 'Entrada' ? 'text-finance-green' : 'text-finance-red'}`}>
+                <div className={`text-right font-mono font-bold ${t.type === 'Entrada' ? 'text-blue-300' : 'text-red-300'} group-hover:${t.type === 'Entrada' ? 'text-blue-600' : 'text-red-600'}`}>
                   {t.type === 'Entrada' ? '+' : '-'} {formatCurrency(t.amount)}
                 </div>
                 <button 
@@ -933,17 +933,17 @@ function YearlyManager({ transactions, onAddTransaction, onDeleteTransaction, go
               <tr 
                 key={data.month} 
                 onClick={() => setSelectedMonthIndex(data.index)}
-                className="border-t border-slate-50 hover:bg-slate-50/80 transition-colors cursor-pointer group"
+                className="border-t border-slate-50 hover:bg-slate-50/50 transition-colors cursor-pointer group"
               >
-                <td className="px-6 py-4 font-medium text-slate-300 group-hover:text-green-600 flex items-center gap-2">
+                <td className="px-6 py-4 font-medium text-white flex items-center gap-2">
                   {data.month}
                 </td>
-                <td className="px-6 py-4 font-mono text-xs text-blue-500">{formatCurrency(data.income)}</td>
-                <td className="px-6 py-4 font-mono text-xs text-finance-red">{formatCurrency(data.expense)}</td>
-                <td className={`px-6 py-4 font-bold font-mono text-xs ${data.balance >= 0 ? 'text-blue-500' : 'text-finance-red'}`}>
+                <td className="px-6 py-4 font-mono text-xs text-blue-300 group-hover:text-blue-500">{formatCurrency(data.income)}</td>
+                <td className="px-6 py-4 font-mono text-xs text-red-300 group-hover:text-red-500">{formatCurrency(data.expense)}</td>
+                <td className={`px-6 py-4 font-bold font-mono text-xs ${data.balance >= 0 ? 'text-blue-300' : 'text-red-300'} group-hover:${data.balance >= 0 ? 'text-blue-500' : 'text-red-500'}`}>
                   {formatCurrency(data.balance)}
                 </td>
-                <td className="px-6 py-4 text-center text-slate-300 group-hover:text-blue-500">
+                <td className="px-6 py-4 text-center text-white group-hover:text-blue-500">
                   <ChevronRight size={16} />
                 </td>
               </tr>
@@ -976,7 +976,7 @@ function YearlyManager({ transactions, onAddTransaction, onDeleteTransaction, go
               </div>
               <div className="space-y-1 text-right">
                 <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest leading-none">Saídas</p>
-                <p className="font-mono text-xs text-finance-red font-bold">{formatCurrency(data.expense)}</p>
+                <p className="font-mono text-xs text-red-300 font-bold">{formatCurrency(data.expense)}</p>
               </div>
             </div>
           </div>
@@ -1000,7 +1000,7 @@ function GoalsManager({ goals, onAdd, onDelete, onUpdate, dreamSavings }: { goal
   return (
     <div className="space-y-8">
       <form onSubmit={handleSubmit} className="card-minimal">
-        <h3 className="font-bold mb-6 text-white">Nova Meta de Sonho</h3>
+        <h3 className="font-bold mb-4 text-white">Nova Meta de Sonho</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="space-y-2">
             <label className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Nome do Sonho</label>
@@ -1015,7 +1015,7 @@ function GoalsManager({ goals, onAdd, onDelete, onUpdate, dreamSavings }: { goal
               placeholder="R$ 0,00" />
           </div>
           <div className="flex items-end">
-            <button type="submit" className="btn-minimal-primary w-full h-[42px]">CRIAR META</button>
+            <button type="submit" className="btn-minimal-primary w-full h-[42px]">Criar Meta</button>
           </div>
         </div>
       </form>
@@ -1027,17 +1027,17 @@ function GoalsManager({ goals, onAdd, onDelete, onUpdate, dreamSavings }: { goal
             <div key={goal.id} className="card-minimal flex flex-col gap-6">
               <div className="flex justify-between items-start">
                 <div>
-                  <h3 className="font-bold text-lg text-slate-800">{goal.name}</h3>
-                  <p className="text-xs text-slate-400">Total acumulado: {formatCurrency(goal.currentAmount)}</p>
+                  <h3 className="font-bold text-lg text-white">{goal.name}</h3>
+                  <p className="text-xs text-slate-300">Total acumulado: {formatCurrency(goal.currentAmount)}</p>
                 </div>
                 <button onClick={() => onDelete(goal.id)} className="p-1 text-slate-300 hover:text-finance-red transition-colors">
                   <Trash2 size={18} />
                 </button>
               </div>
               <div className="space-y-2">
-                <div className="flex justify-between text-xs font-bold text-slate-500 uppercase tracking-widest">
+                <div className="flex justify-between text-xs font-bold text-slate-400 uppercase tracking-widest">
                   <span>Progresso</span>
-                  <span className="text-slate-800 font-bold">{progress.toFixed(0)}%</span>
+                  <span className="text-slate-300 font-bold">{progress.toFixed(0)}%</span>
                 </div>
                 <div className="progress-bar-bg">
                   <motion.div initial={{ width: 0 }} animate={{ width: `${progress}%` }} className="h-full bg-finance-blue rounded-full" />
@@ -1045,7 +1045,7 @@ function GoalsManager({ goals, onAdd, onDelete, onUpdate, dreamSavings }: { goal
                 <p className="text-[10px] text-slate-400">Meta final: {formatCurrency(goal.targetAmount)}</p>
               </div>
               <div className="mt-auto pt-4 border-t border-slate-50">
-                <p className="text-[10px] text-slate-400 bg-slate-50 p-2 rounded text-center italic">
+                <p className="text-[10px] text-slate-900 bg-slate-50 p-2 rounded text-center italic">
                   O progresso é atualizado automaticamente ao adicionar lançamentos na categoria "Sonho".
                 </p>
               </div>

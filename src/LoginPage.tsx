@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from './useAuth';
 import { Mail, Lock, LogOut } from 'lucide-react';
 
+// IMPORTANDO AS IMAGENS AQUI:
 import evokLogo from './assets/evok_logo.png';
 
 export function LoginPage() {
@@ -37,7 +38,7 @@ export function LoginPage() {
           <div className="mb-8">
             <img
               src={evokLogo}
-              alt="Logo"
+              alt="Logo Evok"
               className="w-40 mx-auto"
             />
           </div>
@@ -61,12 +62,12 @@ export function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-12">
           <img
-            src="img/LOGO-EVOK-EF01.png"
+            src={evokLogo}
             alt="Logo Evok"
-            className="w-40 mx-auto mb-6"
+            className="w-100 mx-auto mb-6"
           />
-          <h1 className="text-3xl font-bold text-white mb-2">Controle Inteligente</h1>
-          <p className="text-zinc-400">Gestão financeira baseada na regra 50/30/20</p>
+          <h1 className="text-3xl font-bold text-white mb-2">Controle Inteligente!</h1>
+          <p className="text-xs text-zinc-400">Gestão financeira baseada na regra 50/30/20.</p>
         </div>
 
         {/* Form Card */}
