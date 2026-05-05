@@ -387,7 +387,7 @@ export default function App() {
                           <td className="px-6 py-4">
                             <CategoryBadge category={t.category} isType={t.type === 'Entrada' ? 'Entrada' : undefined} />
                           </td>
-                          <td className={`px-6 py-4 text-right font-bold ${t.type === 'Entrada' ? 'text-blue-500' : 'text-finance-red'}`}>
+                          <td className={`px-6 py-4 text-right font-bold ${t.type === 'Entrada' ? 'text-blue-300' : 'text-red-300'}`}>
                             {t.type === 'Entrada' ? '+' : '-'} {formatCurrency(t.amount)}
                           </td>
                           <td className="px-6 py-4 text-center">
@@ -641,7 +641,7 @@ function TransactionForm({ onAdd, goals }: { onAdd: (t: any) => void, goals: any
             value={category} 
             onChange={e => setCategory(e.target.value as any)}
             disabled={type === 'Entrada'}
-            className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-blue-500 transition-all ${type === 'Entrada' ? 'opacity-60 cursor-not-allowed bg-slate-100' : 'hover:bg-slate-100 cursor-pointer'}`}>
+            className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-green-500 transition-all ${type === 'Entrada' ? 'opacity-60 cursor-not-allowed bg-slate-100' : 'hover:bg-slate-100 cursor-pointer'}`}>
             {type === 'Entrada' ? (
               <option value="Extra">Extra</option>
             ) : (
@@ -805,7 +805,7 @@ function YearlyManager({ transactions, onAddTransaction, onDeleteTransaction, go
               <ArrowLeft size={18} />
             </button>
             <div>
-              <h3 className="font-bold text-slate-800">Detalhes de {monthName} / {selectedYear}</h3>
+              <h3 className="font-bold text-white">Detalhes de {monthName} / {selectedYear}</h3>
               <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Lançamentos do mês</p>
             </div>
           </div>
@@ -822,16 +822,16 @@ function YearlyManager({ transactions, onAddTransaction, onDeleteTransaction, go
           <div className="p-6 bg-slate-50 border-b border-slate-100 animate-in fade-in slide-in-from-top-2">
             <form onSubmit={handleAddInMonth} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="space-y-1">
-                <label className="text-[9px] font-bold text-slate-300 uppercase">Descrição</label>
-                <input type="text" value={desc} onChange={e => setDesc(e.target.value)} className="w-full bg-white border border-slate-200 rounded px-3 py-1.5 text-xs outline-none focus:border-blue-500" placeholder="Ex: Conta de Luz" />
+                <label className="text-[9px] font-bold text-slate-700 uppercase">Descrição</label>
+                <input type="text" value={desc} onChange={e => setDesc(e.target.value)} className="w-full bg-white border border-slate-200 rounded px-3 py-1.5 text-xs outline-none focus:border-green-500" placeholder="Ex: Conta de Luz" />
               </div>
               <div className="space-y-1">
-                <label className="text-[9px] font-bold text-slate-300 uppercase">Valor</label>
-                <input type="number" step="0.01" value={val} onChange={e => setVal(e.target.value)} className="w-full bg-white border border-slate-200 rounded px-3 py-1.5 text-xs outline-none focus:border-blue-500" placeholder="R$ 0,00" />
+                <label className="text-[9px] font-bold text-slate-700 uppercase">Valor</label>
+                <input type="number" step="0.01" value={val} onChange={e => setVal(e.target.value)} className="w-full bg-white border border-slate-200 rounded px-3 py-1.5 text-xs outline-none focus:border-green-500" placeholder="R$ 0,00" />
               </div>
               <div className="space-y-1">
-                <label className="text-[9px] font-bold text-slate-300 uppercase">Categoria</label>
-                <select value={cat} onChange={e => setCat(e.target.value as any)} disabled={typ === 'Entrada'} className="w-full bg-white border border-slate-200 rounded px-3 py-1.5 text-xs outline-none focus:border-blue-500">
+                <label className="text-[9px] font-bold text-slate-700 uppercase">Categoria</label>
+                <select value={cat} onChange={e => setCat(e.target.value as any)} disabled={typ === 'Entrada'} className="w-full bg-white border border-slate-200 rounded px-3 py-1.5 text-xs outline-none focus:border-green-500">
                   {typ === 'Entrada' ? <option value="Extra">Extra</option> : (
                     <>
                       <option value="Necessidade">Necessidade</option>
@@ -908,7 +908,7 @@ function YearlyManager({ transactions, onAddTransaction, onDeleteTransaction, go
         <select 
           value={selectedYear} 
           onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-          className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-1.5 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 cursor-pointer"
+          className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-1.5 text-sm font-bold text-slate-700 outline-none focus:border-green-500 cursor-pointer"
         >
           {years.map(y => (
             <option key={y} value={y}>{y}</option>
