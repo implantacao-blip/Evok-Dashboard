@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from './useAuth';
-import { Mail, Lock, LogOut } from 'lucide-react';
+import { Mail, Lock, LogOut, Key } from 'lucide-react';
+import { supabase } from './supabase.config';
 
 // IMPORTANDO AS IMAGENS AQUI:
 import evokLogo from './assets/evok_logo.png';
@@ -12,24 +13,36 @@ export function LoginPage() {
   const [isSignup, setIsSignup] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
+  e.preventDefault();
+  setError('');
+  setLoading(true);
 
-    try {
-      if (isSignup) {
-        await signup(email, password);
-      } else {
-        await login(email, password);
+  try {
+    if (isSignup) {
+      // 1. Valida código de convite via RPC
+      const { data: isValid, error: codeError } = await supabase
+        .rpc('verify_invite_code', { p_code: inviteCode });
+
+      if (codeError || !isValid) {
+        setError('Código de convite inválido ou já utilizado.');
+        setLoading(false);
+        return;
       }
-    } catch (err: any) {
-      setError(err.message || 'Erro ao autenticar');
-    } finally {
-      setLoading(false);
+
+      // 2. Código válido → prossegue com o cadastro
+      await signup(email, password);
+    } else {
+      await login(email, password);
     }
-  };
+  } catch (err: any) {
+    setError(err.message || 'Erro ao autenticar');
+  } finally {
+    setLoading(false);
+  }
+};
 
   if (user) {
     return (
@@ -120,6 +133,25 @@ export function LoginPage() {
               </div>
             </div>
 
+            {isSignup && (
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                Código de convite
+              </label>
+              <div className="relative">
+                <Key className="absolute left-3 top-3 text-zinc-500" size={20} />
+                <input
+                  type="text"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value)}
+                  placeholder="Código fornecido pela empresa"
+                  className="w-full bg-zinc-700 text-white pl-10 pr-4 py-3 rounded-lg border border-zinc-600 focus:border-green-600 focus:outline-none transition"
+                  required
+                />
+              </div>
+            </div>
+)}
+
             {/* Submit Button */}
             <button
               type="submit"
@@ -138,8 +170,9 @@ export function LoginPage() {
                 onClick={() => {
                   setIsSignup(!isSignup);
                   setError('');
+                  setInviteCode(''); // limpa o código ao trocar
                 }}
-                className="ml-2 text-green-600 hover:text-green-500 font-semibold transition"
+              className="ml-2 text-green-600 hover:text-green-500 font-semibold transition"
               >
                 {isSignup ? 'Entrar' : 'Criar conta'}
               </button>
@@ -149,7 +182,7 @@ export function LoginPage() {
 
         {/* Security Note */}
         <p className="text-center text-zinc-500 text-xs mt-8">
-          🔒 Seus dados estão seguros e criptografados no Firebase
+          🔒 Seus dados estão seguros e criptografados no Supabase
         </p>
       </div>
     </div>

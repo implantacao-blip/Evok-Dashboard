@@ -16,7 +16,6 @@
 @layer base {
   body {
     @apply text-slate-800 font-sans antialiased;
-    background-image: url('img/Gemini_Generated_Image_s2wbins2wbins2wb.png');
     background-size: cover;
     background-position: center;
     background-attachment: fixed;

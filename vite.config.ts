@@ -5,7 +5,7 @@ import {defineConfig, loadEnv} from 'vite';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: '/Evok-Dashboard/',
+  base: '/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '.'),

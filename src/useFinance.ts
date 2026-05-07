@@ -1,16 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  collection,
-  addDoc,
-  deleteDoc,
-  doc,
-  updateDoc,
-  query,
-  where,
-  onSnapshot,
-  Timestamp,
-} from 'firebase/firestore';
-import { db } from './firebase.config';
+import { supabase } from './supabase.config';
 import { useAuth } from './useAuth';
 import { Transaction, Goal, CATEGORY_LIMITS } from './types';
 
@@ -20,7 +9,7 @@ export function useFinance() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Subscribe to user's transactions
+  // Buscar transações do usuário
   useEffect(() => {
     if (!user) {
       setTransactions([]);
@@ -30,71 +19,90 @@ export function useFinance() {
     }
 
     setLoading(true);
-    const q = query(
-      collection(db, 'transactions'),
-      where('userId', '==', user.uid)
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const transactionList: Transaction[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        transactionList.push({
-          id: doc.id,
-          date: data.date,
-          description: data.description,
-          amount: data.amount,
-          type: data.type,
-          category: data.category,
-          goalId: data.goalId,
-        });
-      });
-      setTransactions(transactionList);
-      setLoading(false);
-    });
-
-    return unsubscribe;
+    fetchTransactions();
   }, [user]);
 
-  // Subscribe to user's goals
+  // Buscar metas do usuário
   useEffect(() => {
     if (!user) {
       setGoals([]);
       return;
     }
 
-    const q = query(collection(db, 'goals'), where('userId', '==', user.uid));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const goalList: Goal[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        goalList.push({
-          id: doc.id,
-          name: data.name,
-          targetAmount: data.targetAmount,
-          currentAmount: data.currentAmount,
-          deadline: data.deadline,
-        });
-      });
-      setGoals(goalList);
-    });
-
-    return unsubscribe;
+    fetchGoals();
   }, [user]);
+
+  const fetchTransactions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const transactionList: Transaction[] = (data || []).map((row: any) => ({
+        id: row.id,
+        date: row.date,
+        description: row.description,
+        amount: row.amount,
+        type: row.type,
+        category: row.category,
+        goalId: row.goal_id,
+      }));
+
+      setTransactions(transactionList);
+      setLoading(false);
+    } catch (error) {
+      console.error('Erro ao buscar transações:', error);
+      setLoading(false);
+    }
+  };
+
+  const fetchGoals = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('goals')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const goalList: Goal[] = (data || []).map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        targetAmount: row.target_amount,
+        currentAmount: row.current_amount,
+        deadline: row.deadline,
+      }));
+
+      setGoals(goalList);
+    } catch (error) {
+      console.error('Erro ao buscar metas:', error);
+    }
+  };
 
   const addTransaction = async (t: Omit<Transaction, 'id'>) => {
     if (!user) return;
     try {
-      const data: any = {
-        ...t,
-        userId: user.uid,
-        createdAt: Timestamp.now(),
-      };
-      // Remove campos undefined
-      Object.keys(data).forEach(key => data[key] === undefined && delete data[key]);
-      
-      await addDoc(collection(db, 'transactions'), data);
+      const { error } = await supabase
+        .from('transactions')
+        .insert([
+          {
+            user_id: user.id,
+            date: t.date,
+            description: t.description,
+            amount: t.amount,
+            type: t.type,
+            category: t.category,
+            goal_id: t.goalId,
+          },
+        ]);
+
+      if (error) throw error;
+      await fetchTransactions();
     } catch (error) {
       console.error('Erro ao adicionar transação:', error);
     }
@@ -103,7 +111,14 @@ export function useFinance() {
   const deleteTransaction = async (id: string) => {
     if (!user) return;
     try {
-      await deleteDoc(doc(db, 'transactions', id));
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      await fetchTransactions();
     } catch (error) {
       console.error('Erro ao deletar transação:', error);
     }
@@ -112,7 +127,22 @@ export function useFinance() {
   const updateTransaction = async (id: string, updates: Partial<Transaction>) => {
     if (!user) return;
     try {
-      await updateDoc(doc(db, 'transactions', id), updates);
+      const updateData: any = {};
+      if (updates.date !== undefined) updateData.date = updates.date;
+      if (updates.description !== undefined) updateData.description = updates.description;
+      if (updates.amount !== undefined) updateData.amount = updates.amount;
+      if (updates.type !== undefined) updateData.type = updates.type;
+      if (updates.category !== undefined) updateData.category = updates.category;
+      if (updates.goalId !== undefined) updateData.goal_id = updates.goalId;
+
+      const { error } = await supabase
+        .from('transactions')
+        .update(updateData)
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      await fetchTransactions();
     } catch (error) {
       console.error('Erro ao atualizar transação:', error);
     }
@@ -121,15 +151,20 @@ export function useFinance() {
   const addGoal = async (g: Omit<Goal, 'id'>) => {
     if (!user) return;
     try {
-      const data: any = {
-        ...g,
-        userId: user.uid,
-        createdAt: Timestamp.now(),
-      };
-      // Remove campos undefined
-      Object.keys(data).forEach(key => data[key] === undefined && delete data[key]);
-      
-      await addDoc(collection(db, 'goals'), data);
+      const { error } = await supabase
+        .from('goals')
+        .insert([
+          {
+            user_id: user.id,
+            name: g.name,
+            target_amount: g.targetAmount,
+            current_amount: g.currentAmount,
+            deadline: g.deadline,
+          },
+        ]);
+
+      if (error) throw error;
+      await fetchGoals();
     } catch (error) {
       console.error('Erro ao adicionar meta:', error);
     }
@@ -138,7 +173,20 @@ export function useFinance() {
   const updateGoal = async (id: string, updates: Partial<Goal>) => {
     if (!user) return;
     try {
-      await updateDoc(doc(db, 'goals', id), updates);
+      const updateData: any = {};
+      if (updates.name !== undefined) updateData.name = updates.name;
+      if (updates.targetAmount !== undefined) updateData.target_amount = updates.targetAmount;
+      if (updates.currentAmount !== undefined) updateData.current_amount = updates.currentAmount;
+      if (updates.deadline !== undefined) updateData.deadline = updates.deadline;
+
+      const { error } = await supabase
+        .from('goals')
+        .update(updateData)
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      await fetchGoals();
     } catch (error) {
       console.error('Erro ao atualizar meta:', error);
     }
@@ -147,7 +195,14 @@ export function useFinance() {
   const deleteGoal = async (id: string) => {
     if (!user) return;
     try {
-      await deleteDoc(doc(db, 'goals', id));
+      const { error } = await supabase
+        .from('goals')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      await fetchGoals();
     } catch (error) {
       console.error('Erro ao deletar meta:', error);
     }
@@ -186,7 +241,7 @@ export function useFinance() {
     }
   };
 
-  // Calculations for current month
+  // Cálculos do mês atual
   const now = new Date();
   const currentMonthTransactions = transactions.filter((t) => {
     const d = new Date(t.date);
@@ -225,7 +280,7 @@ export function useFinance() {
     Sonho: totalIncome > 0 ? (expensesByCategory.Sonho / totalIncome) * 100 : 0,
   };
 
-  // Compute actual goal progress based on transactions
+  // Calcular progresso real das metas baseado em transações
   const computedGoals = goals.map((goal) => {
     const attributedAmount = transactions
       .filter((t) => t.goalId === goal.id && t.type === 'Saída')
