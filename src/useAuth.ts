@@ -10,7 +10,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  signup: (email: string, password: string) => Promise<void>;
+  signup: (email: string, password: string, inviteCode: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -22,39 +22,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Ouve mudanças no estado de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (session?.user) {
-          setUser({
-            id: session.user.id,
-            email: session.user.email,
-          });
+          setUser({ id: session.user.id, email: session.user.email });
         } else {
           setUser(null);
         }
         setLoading(false);
       }
     );
-
-    return () => {
-      subscription?.unsubscribe();
-    };
+    return () => subscription?.unsubscribe();
   }, []);
 
-  const signup = async (email: string, password: string) => {
+  const signup = async (email: string, password: string, inviteCode: string) => {
     const { error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: { invite_code: inviteCode } // ✅ trigger vai capturar isso
+      }
     });
     if (error) throw new Error(error.message);
   };
 
   const login = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw new Error(error.message);
   };
 
@@ -65,11 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value: AuthContextType = { user, loading, signup, login, logout };
 
-  return React.createElement(
-    AuthContext.Provider,
-    { value },
-    children
-  );
+  return React.createElement(AuthContext.Provider, { value }, children);
 }
 
 export function useAuth() {
