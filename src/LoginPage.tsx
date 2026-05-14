@@ -61,7 +61,7 @@ const handleSubmit = async (e: React.FormEvent) => {
 
   if (user) {
     return (
-      <div className="w-full h-screen bg-gradient-to-br from-zinc-900 via-zinc-800 to-black flex items-center justify-center">
+      <div className="w-full h-screen bg-linear-to-br from-zinc-900 via-zinc-800 to-black flex items-center justify-center">
         <div className="text-center">
           <div className="mb-8">
             <img src={evokLogo} alt="Logo Evok" className="w-40 mx-auto" />
@@ -81,7 +81,7 @@ const handleSubmit = async (e: React.FormEvent) => {
   }
 
   return (
-    <div className="w-full h-screen bg-gradient-to-br from-zinc-900 via-zinc-800 to-black flex items-center justify-center p-4">
+    <div className="w-full h-screen bg-linear-to-br from-zinc-900 via-zinc-800 to-black flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-12">
           <img src={evokLogo} alt="Logo Evok" className="w-100 mx-auto mb-6" />

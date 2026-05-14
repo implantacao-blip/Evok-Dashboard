@@ -208,15 +208,15 @@ export function useFinance() {
     }
   };
 
-  const updateMonthlyIncome = async (amount: number) => {
+  const updateMonthlyIncome = async (amount: number, targetDate?: Date) => {
     if (!user) return;
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
+    const ref = targetDate ?? new Date();
+    const currentMonth = ref.getMonth();
+    const currentYear = ref.getFullYear();
     const incomeDescription = 'Renda Mensal';
 
     const existingIncome = transactions.find((t) => {
-      const d = new Date(t.date);
+      const d = new Date(t.date + 'T12:00:00');
       return (
         t.type === 'Entrada' &&
         t.description === incomeDescription &&
@@ -231,12 +231,13 @@ export function useFinance() {
         category: 'Salário',
       });
     } else {
+      const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`;
       await addTransaction({
         description: incomeDescription,
         amount,
         type: 'Entrada',
         category: 'Salário',
-        date: now.toISOString().split('T')[0],
+        date: dateStr,
       });
     }
   };
