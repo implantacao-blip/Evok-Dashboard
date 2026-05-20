@@ -6,6 +6,7 @@ import { useAuth } from './useAuth';
 import { LoginPage } from './LoginPage';
 import { TransactionCategory, TransactionType } from './types';
 import { useSavedAccounts } from './useSavedAccounts';
+import { FinanceAgent } from './FinanceAgent';
 import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar } from 'recharts';
 
 import evokLogo from './assets/evok_logo.png';
@@ -248,32 +249,32 @@ export default function App() {
                           <tbody className="text-sm">
                             {filtered.map(t => (
                               editingId === t.id ? (
-                                <tr key={t.id} className="border-t border-slate-50 bg-slate-700/40">
-                                  <td className="px-3 py-2"><input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })} className="bg-slate-600 border border-slate-500 rounded px-2 py-1 text-xs text-white outline-none focus:border-green-500 w-full" /></td>
-                                  <td className="px-3 py-2"><input type="text" value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} className="bg-slate-600 border border-slate-500 rounded px-2 py-1 text-xs text-white outline-none focus:border-green-500 w-full" /></td>
+                                <tr key={t.id} className="border-t border-slate-50 bg-white">
+                                  <td className="px-3 py-2"><input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })} className="bg-neutral-500 border border-slate-500 rounded px-2 py-1 text-xs text-white outline-none focus:border-black w-full" /></td>
+                                  <td className="px-3 py-2"><input type="text" value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} className="bg-neutral-500 border border-slate-500 rounded px-2 py-1 text-xs text-white outline-none focus:border-black w-full" /></td>
                                   <td className="px-3 py-2">
-                                    <select value={editForm.category} onChange={e => setEditForm({ ...editForm, category: e.target.value })} className="bg-slate-600 border border-slate-500 rounded px-2 py-1 text-xs text-white outline-none focus:border-green-500">
+                                    <select value={editForm.category} onChange={e => setEditForm({ ...editForm, category: e.target.value })} className="bg-neutral-500 border border-slate-500 rounded px-2 py-1 text-xs text-white outline-none focus:border-black">
                                       <option value="Necessidade">Necessidade</option><option value="Desejo">Desejo</option><option value="Sonho">Sonho</option><option value="Extra">Extra</option><option value="Salário">Salário</option>
                                     </select>
                                   </td>
-                                  <td className="px-3 py-2"><input type="number" step="0.01" value={editForm.amount} onChange={e => setEditForm({ ...editForm, amount: parseFloat(e.target.value) })} className="bg-slate-600 border border-slate-500 rounded px-2 py-1 text-xs text-white outline-none focus:border-green-500 w-full text-right" /></td>
+                                  <td className="px-3 py-2"><input type="number" step="0.01" value={editForm.amount} onChange={e => setEditForm({ ...editForm, amount: parseFloat(e.target.value) })} className="bg-neutral-500 border border-slate-500 rounded px-2 py-1 text-xs text-white outline-none focus:border-black w-full text-right" /></td>
                                   <td className="px-3 py-2 text-center">
                                     <div className="flex items-center justify-center gap-2">
-                                      <button onClick={saveEdit} className="p-1.5 text-green-400 hover:text-green-300 transition-colors" title="Salvar"><Check size={16} /></button>
-                                      <button onClick={() => setEditingId(null)} className="p-1.5 text-slate-400 hover:text-slate-300 transition-colors" title="Cancelar"><X size={16} /></button>
+                                      <button onClick={saveEdit} className="p-1.5 text-slate-600 hover:text-green-500 transition-colors" title="Salvar"><Check size={16} /></button>
+                                      <button onClick={() => setEditingId(null)} className="p-1.5 text-slate-600 hover:text-red-500 transition-colors" title="Cancelar"><X size={16} /></button>
                                     </div>
                                   </td>
                                 </tr>
                               ) : (
-                                <tr key={t.id} className="border-t border-slate-50 hover:bg-slate-50/50 transition-colors">
-                                  <td className="px-6 py-4 text-white font-mono text-xs">{new Date(t.date + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
-                                  <td className="px-6 py-4 font-medium text-slate-300">{t.description}</td>
+                                <tr key={t.id} className="border-t border-white hover:bg-white transition-colors group">
+                                  <td className="px-6 py-4 text-white font-mono text-xs group-hover:text-black">{new Date(t.date + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
+                                  <td className="px-6 py-4 font-medium text-slate-300 group-hover:text-slate-600">{t.description}</td>
                                   <td className="px-6 py-4"><CategoryBadge category={t.category} isType={t.type === 'Entrada' ? 'Entrada' : undefined} /></td>
-                                  <td className={`px-6 py-4 text-right font-bold ${t.type === 'Entrada' ? 'text-blue-300' : 'text-red-300'}`}>{t.type === 'Entrada' ? '+' : '-'} {formatCurrency(t.amount)}</td>
+                                  <td className={`px-6 py-4 text-right font-bold ${t.type === 'Entrada' ? 'text-blue-300 group-hover:text-blue-500' : 'text-red-300 group-hover:text-red-500'}`}>{t.type === 'Entrada' ? '+' : '-'} {formatCurrency(t.amount)}</td>
                                   <td className="px-6 py-4 text-center">
                                     <div className="flex items-center justify-center gap-3">
-                                      <button onClick={() => startEdit(t)} className="p-1 hover:text-green-400 text-slate-300 transition-colors" title="Editar"><Pencil size={15} /></button>
-                                      <button onClick={() => finance.deleteTransaction(t.id)} className="p-1 hover:text-red-400 text-slate-300 transition-colors" title="Excluir"><Trash2 size={15} /></button>
+                                      <button onClick={() => startEdit(t)} className="p-1 hover:text-green-400 text-slate-300 group-hover:text-slate-500 transition-colors" title="Editar"><Pencil size={15} /></button>
+                                      <button onClick={() => finance.deleteTransaction(t.id)} className="p-1 hover:text-red-400 text-slate-300 group-hover:text-slate-500 transition-colors" title="Excluir"><Trash2 size={15} /></button>
                                     </div>
                                   </td>
                                 </tr>
@@ -348,12 +349,15 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      <motion.button initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-        onClick={() => setActiveTab('transactions')}
-        className="fixed bottom-4 right-4 z-50 w-10 h-10 bg-white p-2 rounded-lg shadow-sm border border-slate-200 flex items-center justify-center text-slate-600 hover:text-finance-blue hover:bg-slate-50 transition-all"
-        title="Novo Lançamento">
-        <Plus size={20} />
-      </motion.button>
+      <FinanceAgent
+        transactions={finance.transactions}
+        goals={finance.goals}
+        totalIncome={finance.totalIncome}
+        totalExpense={finance.totalExpense}
+        expensesByCategory={finance.expensesByCategory}
+        idealByCategory={finance.idealByCategory}
+        percentSpent={finance.percentSpent}
+      />
     </div>
   );
 }
@@ -418,7 +422,7 @@ function CategoryCard({ category, limit, current, ideal, percent }: { category: 
 }
 
 function CategoryBadge({ category, isType }: { category: string; isType?: string }) {
-  const styles: Record<string, string> = { Necessidade: 'bg-blue-50 text-blue-500', Desejo: 'bg-amber-50 text-amber-400', Sonho: 'bg-purple-50 text-purple-600', Entrada: 'bg-indigo-50 text-indigo-800', Salário: 'bg-slate-900 text-white font-bold', Extra: 'bg-teal-50 text-teal-700 font-medium' };
+  const styles: Record<string, string> = { Necessidade: 'bg-blue-50 text-blue-600 group-hover:bg-blue-100', Desejo: 'bg-amber-50 text-amber-600 group-hover:bg-amber-100', Sonho: 'bg-purple-50 text-purple-700 group-hover:bg-purple-100', Entrada: 'bg-indigo-50 text-indigo-800 group-hover:bg-indigo-200', Salário: 'bg-slate-900 text-white font-bold group-hover:bg-slate-800', Extra: 'bg-teal-50 text-teal-700 font-medium group-hover:bg-teal-100' };
   return <span className={`${styles[isType || category] || 'bg-slate-100 text-slate-600'} px-2 py-1 rounded text-[10px] uppercase tracking-wider font-medium`}>{isType || category}</span>;
 }
 
@@ -630,10 +634,10 @@ function YearlyManager({ transactions, onAddTransaction, onDeleteTransaction, go
         )}
         <div className="divide-y divide-slate-50">
           {monthlyTransactions.map(t => (
-            <div key={t.id} className="p-4 flex justify-between items-center hover:bg-slate-50/50 transition-colors">
-              <div><p className="font-bold text-white">{t.description}</p><div className="flex gap-2 items-center mt-1"><span className="text-[10px] font-mono text-slate-200">{new Date(t.date + 'T12:00:00').toLocaleDateString('pt-BR')}</span><CategoryBadge category={t.category} isType={t.type === 'Entrada' ? 'Entrada' : undefined} /></div></div>
+            <div key={t.id} className="p-4 flex justify-between items-center hover:bg-white transition-colors group">
+              <div><p className="font-bold text-white group-hover:text-black">{t.description}</p><div className="flex gap-2 items-center mt-1"><span className="text-[10px] font-mono text-slate-200 group-hover:text-slate-600">{new Date(t.date + 'T12:00:00').toLocaleDateString('pt-BR')}</span><CategoryBadge category={t.category} isType={t.type === 'Entrada' ? 'Entrada' : undefined} /></div></div>
               <div className="flex items-center gap-4">
-                <div className={`text-right font-mono font-bold ${t.type === 'Entrada' ? 'text-blue-300' : 'text-red-300'}`}>{t.type === 'Entrada' ? '+' : '-'} {formatCurrency(t.amount)}</div>
+                <div className={`text-right font-mono font-bold ${t.type === 'Entrada' ? 'text-blue-300 group-hover:text-blue-500' : 'text-red-300 group-hover:text-red-500'}`}>{t.type === 'Entrada' ? '+' : '-'} {formatCurrency(t.amount)}</div>
                 <button onClick={() => onDeleteTransaction(t.id)} className="p-1.5 text-slate-300 hover:text-finance-red transition-colors" title="Excluir"><Trash2 size={16} /></button>
               </div>
             </div>
@@ -657,13 +661,13 @@ function YearlyManager({ transactions, onAddTransaction, onDeleteTransaction, go
           <thead className="bg-slate-50/50"><tr className="text-[10px] uppercase font-bold text-white"><th className="px-6 py-4">Mês</th><th className="px-6 py-4">Entradas</th><th className="px-6 py-4">Saídas</th><th className="px-6 py-4">Balanço</th><th className="px-6 py-4 text-center">Ações</th></tr></thead>
           <tbody className="text-sm">
             {annualData.map(data => (
-              <tr key={data.month} onClick={() => setSelectedMonthIndex(data.index)} className="border-t border-slate-50 hover:bg-slate-50/50 transition-colors cursor-pointer group">
-                <td className="px-6 py-4 font-medium text-white">{data.month}</td>
-                <td className="px-6 py-4 font-mono text-xs text-blue-300">{formatCurrency(data.income)}</td>
-                <td className="px-6 py-4 font-mono text-xs text-red-300">{formatCurrency(data.expense)}</td>
-                <td className={`px-6 py-4 font-bold font-mono text-xs ${data.balance >= 0 ? 'text-blue-300' : 'text-red-300'}`}>{formatCurrency(data.balance)}</td>
-                <td className="px-6 py-4 text-center text-white"><ChevronRight size={16} /></td>
-              </tr>
+              <tr key={data.month} onClick={() => setSelectedMonthIndex(data.index)} className="border-t border-slate-50 hover:bg-white transition-colors cursor-pointer group">
+                <td className="px-6 py-4 font-medium text-white group-hover:text-black">{data.month}</td>
+                <td className="px-6 py-4 font-mono text-xs text-blue-300 group-hover:text-blue-500">{formatCurrency(data.income)}</td>
+                <td className="px-6 py-4 font-mono text-xs text-red-300 group-hover:text-red-500">{formatCurrency(data.expense)}</td>
+                <td className={`px-6 py-4 font-bold font-mono text-xs ${data.balance >= 0 ? 'text-blue-300 group-hover:text-blue-500' : 'text-red-300 group-hover:text-red-500'}`}>{formatCurrency(data.balance)}</td>
+                <td className="px-6 py-4 text-center text-white group-hover:text-black"><ChevronRight size={16} /></td>
+              </tr> 
             ))}
           </tbody>
         </table>
