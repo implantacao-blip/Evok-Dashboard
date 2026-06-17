@@ -36,14 +36,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signup = async (email: string, password: string, inviteCode: string) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { invite_code: inviteCode } // ✅ trigger vai capturar isso
-      }
-    });
-    if (error) throw new Error(error.message);
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { invite_code: inviteCode }
+    }
+  });
+  if (error) throw new Error(error.message);
+
+  const userId = data.user?.id;
+    if (!userId) throw new Error('Erro ao obter ID do usuário após cadastro.');
+
+  const { data: codeMarked, error: codeError } = await supabase.rpc(
+    'verify_invite_code',
+    { p_code: inviteCode, p_user_id: userId }
+  );
+
+    if (codeError) throw new Error('Erro ao registrar uso do código de convite.');
+    if (!codeMarked) throw new Error('Código de convite inválido ou já utilizado.');
   };
 
   const login = async (email: string, password: string) => {

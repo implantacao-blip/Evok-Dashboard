@@ -244,10 +244,11 @@ export function useFinance() {
 
   // Cálculos do mês atual
   const now = new Date();
+
   const currentMonthTransactions = transactions.filter((t) => {
-    const d = new Date(t.date);
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  });
+  const d = new Date(t.date + 'T12:00:00');
+  return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+});
 
   const totalIncome = currentMonthTransactions
     .filter((t) => t.type === 'Entrada')

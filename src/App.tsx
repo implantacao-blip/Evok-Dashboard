@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useFinance } from './useFinance';
 import { useAuth } from './useAuth';
 import { LoginPage } from './LoginPage';
-import { TransactionCategory, TransactionType } from './types';
+import { Transaction, TransactionCategory, TransactionType } from './types';
 import { useSavedAccounts } from './useSavedAccounts';
 import { FinanceAgent } from './FinanceAgent';
 import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar } from 'recharts';
@@ -24,30 +24,30 @@ export default function App() {
   const [historyDate, setHistoryDate] = useState(new Date());
   const [chartYear, setChartYear] = useState(new Date().getFullYear());
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<any>({});
+  const [editForm, setEditForm] = useState<Partial<Transaction>>({});
   const finance = useFinance();
   const savedAccounts = useSavedAccounts();
   const { user, logout, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="w-full h-screen bg-zinc-800 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
-      </div>
-    );
-  }
+  return (
+    <div className="w-full h-screen bg-zinc-800 flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+    </div>
+  );
+}
 
-  if (!user) return <LoginPage />;
+if (!user) return <LoginPage />;
 
-  const displayedIncome = (() => {
-    const ref = activeTab === 'transactions' ? historyDate : new Date();
-    return finance.transactions
-      .filter(t => {
-        const d = new Date(t.date + 'T12:00:00');
-        return t.type === 'Entrada' && d.getMonth() === ref.getMonth() && d.getFullYear() === ref.getFullYear();
-      })
-      .reduce((acc, t) => acc + t.amount, 0);
-  })();
+const displayedIncome = (() => {
+  const ref = activeTab === 'transactions' ? historyDate : new Date();
+  return finance.transactions
+    .filter(t => {
+      const d = new Date(t.date + 'T12:00:00');
+      return t.type === 'Entrada' && d.getMonth() === ref.getMonth() && d.getFullYear() === ref.getFullYear();
+    })
+    .reduce((acc, t) => acc + t.amount, 0);
+})();
 
   const handleIncomeSubmit = () => {
     if (tempIncome !== '' && !isNaN(parseFloat(tempIncome))) {
@@ -57,10 +57,10 @@ export default function App() {
     setIsEditingIncome(false);
   };
 
-  const startEdit = (t: any) => {
-    setEditingId(t.id);
-    setEditForm({ description: t.description, amount: t.amount, date: t.date, category: t.category, type: t.type });
-  };
+  const startEdit = (t: Transaction) => {
+  setEditingId(t.id);
+  setEditForm({ description: t.description, amount: t.amount, date: t.date, category: t.category, type: t.type });
+};
 
   const saveEdit = async () => {
     if (!editingId) return;
@@ -253,7 +253,7 @@ export default function App() {
                                   <td className="px-3 py-2"><input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })} className="bg-neutral-500 border border-slate-500 rounded px-2 py-1 text-xs text-white outline-none focus:border-black w-full" /></td>
                                   <td className="px-3 py-2"><input type="text" value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} className="bg-neutral-500 border border-slate-500 rounded px-2 py-1 text-xs text-white outline-none focus:border-black w-full" /></td>
                                   <td className="px-3 py-2">
-                                    <select value={editForm.category} onChange={e => setEditForm({ ...editForm, category: e.target.value })} className="bg-neutral-500 border border-slate-500 rounded px-2 py-1 text-xs text-white outline-none focus:border-black">
+                                    <select value={editForm.category} onChange={e => setEditForm({ ...editForm, category: e.target.value as TransactionCategory })} className="bg-neutral-500 border border-slate-500 rounded px-2 py-1 text-xs text-white outline-none focus:border-black">
                                       <option value="Necessidade">Necessidade</option><option value="Desejo">Desejo</option><option value="Sonho">Sonho</option><option value="Extra">Extra</option><option value="Salário">Salário</option>
                                     </select>
                                   </td>
@@ -293,7 +293,7 @@ export default function App() {
                                 <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase font-bold">Valor</label><input type="number" step="0.01" value={editForm.amount} onChange={e => setEditForm({ ...editForm, amount: parseFloat(e.target.value) })} className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-green-500" /></div>
                               </div>
                               <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase font-bold">Descrição</label><input type="text" value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-green-500" /></div>
-                              <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase font-bold">Categoria</label><select value={editForm.category} onChange={e => setEditForm({ ...editForm, category: e.target.value })} className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-green-500"><option value="Necessidade">Necessidade</option><option value="Desejo">Desejo</option><option value="Sonho">Sonho</option><option value="Extra">Extra</option><option value="Salário">Salário</option></select></div>
+                              <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase font-bold">Categoria</label><select value={editForm.category} onChange={e => setEditForm({ ...editForm, category: e.target.value as TransactionCategory })} className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-green-500"><option value="Necessidade">Necessidade</option><option value="Desejo">Desejo</option><option value="Sonho">Sonho</option><option value="Extra">Extra</option><option value="Salário">Salário</option></select></div>
                               <div className="flex gap-2 pt-1">
                                 <button onClick={saveEdit} className="flex-1 py-1.5 bg-green-600 text-white text-xs font-bold rounded flex items-center justify-center gap-1"><Check size={14} /> Salvar</button>
                                 <button onClick={() => setEditingId(null)} className="flex-1 py-1.5 bg-slate-600 text-slate-200 text-xs font-bold rounded">Cancelar</button>
@@ -443,7 +443,7 @@ function TransactionForm({ onAdd, goals, transactions = [], savedAccounts = [], 
   useEffect(() => {
     if (type === 'Entrada') { setCategory('Extra'); setIsInstallment(false); }
     else if (category === 'Extra' || category === 'Salário') setCategory('Necessidade');
-  }, [type]);
+  }, [type, category]);
 
   const historicDescriptions = Array.from(new Set(transactions.map(t => t.description))).filter(d => d !== 'Renda Mensal');
   const favoritedDescriptions = savedAccounts.map((s: any) => s.description);

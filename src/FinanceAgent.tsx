@@ -26,7 +26,7 @@ export type FinanceAgentProps = {
 const formatCurrency = (val: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
-const API_KEY = import.meta.env.VITE_GOOGLE_AI_KEY || 'AIzaSyD9le_irkWaP0O9ktxNZCoh9vHrqP-dO1g';
+const API_KEY = import.meta.env.VITE_GOOGLE_AI_KEY || '';
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
 
 function buildSystemPrompt(props: FinanceAgentProps): string {
