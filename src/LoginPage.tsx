@@ -22,33 +22,18 @@ const handleSubmit = async (e: React.FormEvent) => {
 
   try {
     if (isSignup) {
-      // 1. Valida o código de convite
-      const { data: isValid, error: codeError } = await supabase
-        .rpc('verify_invite_code', { p_code: inviteCode });
-
-      if (codeError || !isValid) {
-        setError('Código de convite inválido ou já utilizado.');
-        return;
-      }
-
-      // 2. Cadastra passando o inviteCode no metadata
       await signup(email, password, inviteCode);
-
-      // ✅ Mensagem orientando a confirmar o email
       setSuccess(
-        '✅ Conta criada! Enviamos um link de confirmação para ' + email + 
-        '. Verifique sua caixa de entrada (e o spam) para ativar sua conta.'
+        `✅ Conta criada! Enviamos um link de confirmação para ${email}. Verifique sua caixa de entrada (e o spam) para ativar sua conta.`
       );
       setIsSignup(false);
       setEmail('');
       setPassword('');
       setInviteCode('');
-
     } else {
       await login(email, password);
     }
   } catch (err: any) {
-    // Trata o erro específico de email não confirmado
     if (err.message?.includes('Email not confirmed')) {
       setError('Seu email ainda não foi confirmado. Verifique sua caixa de entrada.');
     } else {
