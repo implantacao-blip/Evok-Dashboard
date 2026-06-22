@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from './useAuth';
 import { Mail, Lock, LogOut, Key, CheckCircle } from 'lucide-react';
-import evokLogo from './assets/evok_logo.png';
+import evokLogo from './assets/evokmif_logo0.png';
 
 export function LoginPage() {
   const { login, signup, logout, user } = useAuth();
@@ -65,13 +65,13 @@ const handleSubmit = async (e: React.FormEvent) => {
   }
 
   return (
-    <div className="w-full h-screen bg-linear-to-br from-zinc-900 via-zinc-800 to-black flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-12">
-          <img src={evokLogo} alt="Logo Evok" className="w-100 mx-auto mb-6" />
-          <h1 className="text-3xl font-bold text-white mb-2">Controle Inteligente!</h1>
-          <p className="text-xs text-zinc-400">Meu Incrivel Financeiro</p>
-        </div>
+    <div className="w-full h-screen bg-linear-to-br from-zinc-900 via-zinc-800 to-black flex flex-col items-center justify-center p-4">
+    <img src={evokLogo} alt="Logo Evok" className="mx-auto mb-6" style={{ width: '600px', maxWidth: '90vw' }} />
+    <div className="w-full max-w-md">
+    <div className="text-center mb-12">
+      <h1 className="text-3xl font-bold text-white mb-3">Controle Inteligente!</h1>
+      <p className="text-xs text-zinc-400">Sua gestão Financeira</p>
+    </div>
 
         <div className="bg-zinc-800 border border-zinc-700 rounded-2xl p-8 shadow-2xl">
           <h2 className="text-2xl font-bold text-white mb-6 text-center">

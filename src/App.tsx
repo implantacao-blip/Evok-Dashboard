@@ -9,7 +9,7 @@ import { useSavedAccounts } from './useSavedAccounts';
 import { FinanceAgent } from './FinanceAgent';
 import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar } from 'recharts';
 
-import evokLogo from './assets/evok_logo.png';
+import evokLogo from './assets/evokmif_logo0.png';
 import bgImage from './assets/background.png';
 
 const formatCurrency = (val: number) => {
@@ -77,10 +77,13 @@ const displayedIncome = (() => {
       </button>
 
       <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-zinc-800 border-black border-r flex flex-col transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static`}>
-        <div className="p-8 flex items-center gap-3">
-          <div className="w-40 h-14 rounded-xl overflow-hidden shadow-sm group transition-transform hover:scale-105 active:scale-95 shrink-0">
-            <img src={evokLogo} alt="Logo Evok" className="w-full h-full object-cover" />
-          </div>
+        <div className="p-6 flex items-center justify-center">
+          <img 
+          src={evokLogo} 
+          alt="Logo Evok" 
+          className="mx-auto transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+          style={{ width: '250px', maxWidth: '100%' }}
+          />
         </div>
         <nav className="flex-1 mt-4">
           <SidebarItem active={activeTab === 'dashboard'} onClick={() => { setActiveTab('dashboard'); setIsSidebarOpen(false); }} icon={<LayoutDashboard size={18} />} label="Dashboard" />
