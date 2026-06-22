@@ -35,26 +35,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription?.unsubscribe();
   }, []);
 
-  const signup = async (email: string, password: string, inviteCode: string) => {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { invite_code: inviteCode }
-    }
-  });
-  if (error) throw new Error(error.message);
+const signup = async (email: string, password: string, inviteCode: string) => {
+    // 1. Verifica se o código é válido ANTES de criar o usuário
+    const { data: isValid, error: checkError } = await supabase.rpc(
+      'check_invite_code',
+      { p_code: inviteCode }
+    );
 
-  const userId = data.user?.id;
+    if (checkError || !isValid) {
+      throw new Error('Código de convite inválido ou já utilizado.');
+    }
+
+    // 2. Cria o usuário somente se o código for válido
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { invite_code: inviteCode }
+      }
+    });
+    if (error) throw new Error(error.message);
+
+    const userId = data.user?.id;
     if (!userId) throw new Error('Erro ao obter ID do usuário após cadastro.');
 
-  const { data: codeMarked, error: codeError } = await supabase.rpc(
-    'verify_invite_code',
-    { p_code: inviteCode, p_user_id: userId }
-  );
+    // 3. Marca o código como usado
+    const { data: codeMarked, error: codeError } = await supabase.rpc(
+      'verify_invite_code',
+      { p_code: inviteCode, p_user_id: userId }
+    );
 
-    if (codeError) throw new Error('Erro ao registrar uso do código de convite.');
-    if (!codeMarked) throw new Error('Código de convite inválido ou já utilizado.');
+    if (codeError || !codeMarked) {
+      await supabase.auth.signOut();
+      throw new Error('Erro ao registrar uso do código de convite.');
+    }
   };
 
   const login = async (email: string, password: string) => {

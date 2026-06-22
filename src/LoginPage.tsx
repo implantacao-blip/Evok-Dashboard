@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from './useAuth';
 import { Mail, Lock, LogOut, Key, CheckCircle } from 'lucide-react';
-import { supabase } from './supabase.config';
 import evokLogo from './assets/evok_logo.png';
 
 export function LoginPage() {
@@ -24,8 +23,8 @@ const handleSubmit = async (e: React.FormEvent) => {
     if (isSignup) {
       await signup(email, password, inviteCode);
       setSuccess(
-        `✅ Conta criada! Enviamos um link de confirmação para ${email}. Verifique sua caixa de entrada (e o spam) para ativar sua conta.`
-      );
+  `✅ Conta criada com sucesso! Você já pode fazer login com seu email e senha.`
+);
       setIsSignup(false);
       setEmail('');
       setPassword('');
@@ -71,7 +70,7 @@ const handleSubmit = async (e: React.FormEvent) => {
         <div className="text-center mb-12">
           <img src={evokLogo} alt="Logo Evok" className="w-100 mx-auto mb-6" />
           <h1 className="text-3xl font-bold text-white mb-2">Controle Inteligente!</h1>
-          <p className="text-xs text-zinc-400">Gestão financeira baseada na regra 50/30/20.</p>
+          <p className="text-xs text-zinc-400">Meu Incrivel Financeiro</p>
         </div>
 
         <div className="bg-zinc-800 border border-zinc-700 rounded-2xl p-8 shadow-2xl">
