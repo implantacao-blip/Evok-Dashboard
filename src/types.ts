@@ -10,6 +10,9 @@ export interface Transaction {
   type: TransactionType;
   category: TransactionCategory;
   goalId?: string; // Link to specific dream goal
+  installmentId?: string;    // Vínculo entre parcelas da mesma compra
+  installmentIndex?: number; // Número da parcela (1, 2, 3...)
+  installmentTotal?: number; // Total de parcelas
 }
 
 export interface Goal {

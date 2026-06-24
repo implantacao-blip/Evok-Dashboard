@@ -25,6 +25,9 @@ export default function App() {
   const [chartYear, setChartYear] = useState(new Date().getFullYear());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Transaction>>({});
+  const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null);
+  const [diffModal, setDiffModal] = useState<{ original: Transaction; diff: number } | null>(null);
+  const [groupEditModal, setGroupEditModal] = useState<{ original: Transaction; fields: { description?: string; category?: TransactionCategory } } | null>(null);
   const finance = useFinance();
   const savedAccounts = useSavedAccounts();
   const { user, logout, loading } = useAuth();
@@ -64,8 +67,47 @@ const displayedIncome = (() => {
 
   const saveEdit = async () => {
     if (!editingId) return;
+
+    const original = finance.transactions.find(t => t.id === editingId);
+
+    // Salva a edição da parcela individual primeiro
     await finance.updateTransaction(editingId, editForm);
+
+    if (original && original.installmentId) {
+      // 1) Diferença de valor → modal de ajuste
+      if (editForm.amount !== undefined) {
+        const valueDiff = Math.round((original.amount - editForm.amount) * 100) / 100;
+        if (valueDiff !== 0) {
+          setEditingId(null);
+          setDiffModal({ original, diff: valueDiff });
+          return;
+        }
+      }
+
+      // 2) Mudança de descrição/categoria → modal de propagação em grupo
+      const changedFields: { description?: string; category?: TransactionCategory } = {};
+      if (editForm.description !== undefined && editForm.description !== original.description) {
+        changedFields.description = editForm.description;
+      }
+      if (editForm.category !== undefined && editForm.category !== original.category) {
+        changedFields.category = editForm.category;
+      }
+      if (changedFields.description || changedFields.category) {
+        setEditingId(null);
+        setGroupEditModal({ original, fields: changedFields });
+        return;
+      }
+    }
+
     setEditingId(null);
+  };
+
+  const handleDeleteClick = (t: Transaction) => {
+    if (t.installmentId) {
+      setDeleteTarget(t);
+    } else {
+      finance.deleteTransaction(t.id);
+    }
   };
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
@@ -253,7 +295,7 @@ const displayedIncome = (() => {
                             {filtered.map(t => (
                               editingId === t.id ? (
                                 <tr key={t.id} className="border-t border-slate-50 bg-white">
-                                  <td className="px-3 py-2"><input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })} className="bg-neutral-500 border border-slate-500 rounded px-2 py-1 text-xs text-white outline-none focus:border-black w-full" /></td>
+                                  <td className="px-3 py-2"><input type="date" value={editForm.date} disabled={!!t.installmentId} onChange={e => setEditForm({ ...editForm, date: e.target.value })} title={t.installmentId ? 'A data de parcelas não pode ser alterada' : ''} className={`bg-neutral-500 border border-slate-500 rounded px-2 py-1 text-xs text-white outline-none focus:border-black w-full ${t.installmentId ? 'opacity-40 cursor-not-allowed' : ''}`} /></td>
                                   <td className="px-3 py-2"><input type="text" value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} className="bg-neutral-500 border border-slate-500 rounded px-2 py-1 text-xs text-white outline-none focus:border-black w-full" /></td>
                                   <td className="px-3 py-2">
                                     <select value={editForm.category} onChange={e => setEditForm({ ...editForm, category: e.target.value as TransactionCategory })} className="bg-neutral-500 border border-slate-500 rounded px-2 py-1 text-xs text-white outline-none focus:border-black">
@@ -277,7 +319,7 @@ const displayedIncome = (() => {
                                   <td className="px-6 py-4 text-center">
                                     <div className="flex items-center justify-center gap-3">
                                       <button onClick={() => startEdit(t)} className="p-1 hover:text-green-400 text-slate-300 group-hover:text-slate-500 transition-colors" title="Editar"><Pencil size={15} /></button>
-                                      <button onClick={() => finance.deleteTransaction(t.id)} className="p-1 hover:text-red-400 text-slate-300 group-hover:text-slate-500 transition-colors" title="Excluir"><Trash2 size={15} /></button>
+                                      <button onClick={() => handleDeleteClick(t)} className="p-1 hover:text-red-400 text-slate-300 group-hover:text-slate-500 transition-colors" title="Excluir"><Trash2 size={15} /></button>
                                     </div>
                                   </td>
                                 </tr>
@@ -292,7 +334,7 @@ const displayedIncome = (() => {
                           editingId === t.id ? (
                             <div key={t.id} className="p-4 bg-slate-700/40 space-y-3">
                               <div className="grid grid-cols-2 gap-3">
-                                <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase font-bold">Data</label><input type="date" value={editForm.date} onChange={e => setEditForm({ ...editForm, date: e.target.value })} className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-green-500" /></div>
+                                <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase font-bold">Data {t.installmentId && <span className="text-slate-500 normal-case">(travada)</span>}</label><input type="date" value={editForm.date} disabled={!!t.installmentId} onChange={e => setEditForm({ ...editForm, date: e.target.value })} className={`w-full bg-slate-600 border border-slate-500 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-green-500 ${t.installmentId ? 'opacity-40 cursor-not-allowed' : ''}`} /></div>
                                 <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase font-bold">Valor</label><input type="number" step="0.01" value={editForm.amount} onChange={e => setEditForm({ ...editForm, amount: parseFloat(e.target.value) })} className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-green-500" /></div>
                               </div>
                               <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase font-bold">Descrição</label><input type="text" value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-green-500" /></div>
@@ -316,7 +358,7 @@ const displayedIncome = (() => {
                                   <span className={`text-sm font-bold whitespace-nowrap ${t.type === 'Entrada' ? 'text-blue-300' : 'text-red-300'}`}>{t.type === 'Entrada' ? '+' : '-'} {formatCurrency(t.amount)}</span>
                                   <div className="flex gap-2">
                                     <button onClick={() => startEdit(t)} className="p-1.5 bg-slate-600 text-slate-300 rounded-md hover:text-green-400 transition-colors"><Pencil size={13} /></button>
-                                    <button onClick={() => finance.deleteTransaction(t.id)} className="p-1.5 bg-slate-600 text-slate-300 rounded-md hover:text-red-400 transition-colors"><Trash2 size={13} /></button>
+                                    <button onClick={() => handleDeleteClick(t)} className="p-1.5 bg-slate-600 text-slate-300 rounded-md hover:text-red-400 transition-colors"><Trash2 size={13} /></button>
                                   </div>
                                 </div>
                               </div>
@@ -350,7 +392,184 @@ const displayedIncome = (() => {
             </motion.div>
           )}
         </AnimatePresence>
+
+        <AnimatePresence>
+        {diffModal && (() => {
+          const { original, diff } = diffModal;
+          const hasFuture = finance.transactions.some(
+            t => t.installmentId === original.installmentId && t.date > original.date
+          );
+          const isReduction = diff > 0; // sobrou valor (pagou menos)
+          const absDiff = Math.abs(diff);
+
+          return (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setDiffModal(null)}
+              className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                transition={{ type: 'spring', damping: 24, stiffness: 320 }}
+                onClick={e => e.stopPropagation()}
+                className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl"
+                style={{ background: 'linear-gradient(160deg, #1a1a1e 0%, #232328 100%)', border: '1px solid rgba(255,255,255,0.08)' }}
+              >
+                <div className="p-5 border-b border-white/5">
+                  <h3 className="text-white font-bold text-base">Ajuste de parcela</h3>
+                  <p className="text-slate-400 text-xs mt-1">
+                    {isReduction
+                      ? `Você reduziu esta parcela. Sobraram ${formatCurrency(absDiff)} para realocar. O que deseja fazer?`
+                      : `Você aumentou esta parcela em ${formatCurrency(absDiff)}. Como deseja compensar?`}
+                  </p>
+                </div>
+                <div className="p-4 space-y-2">
+                  {/* Opção A — Redistribuir (só se houver futuras) */}
+                  {hasFuture && (
+                    <button
+                      onClick={async () => {
+                        await finance.redistributeInstallmentDiff(original.installmentId!, original.date, diff);
+                        setDiffModal(null);
+                      }}
+                      className="w-full text-left px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+                    >
+                      <p className="text-white text-sm font-semibold">Redistribuir nas parcelas futuras</p>
+                      <p className="text-slate-400 text-[11px] mt-0.5">
+                        {isReduction
+                          ? 'O valor que sobrou é somado às próximas parcelas.'
+                          : 'O valor extra é abatido das próximas parcelas.'}
+                      </p>
+                    </button>
+                  )}
+
+                  {/* Opção B — Criar parcela extra (só em reduções) */}
+                  {isReduction && (
+                    <button
+                      onClick={async () => {
+                        await finance.addExtraInstallment(original.installmentId!, absDiff);
+                        setDiffModal(null);
+                      }}
+                      className="w-full text-left px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+                    >
+                      <p className="text-white text-sm font-semibold">Criar uma nova parcela</p>
+                      <p className="text-slate-400 text-[11px] mt-0.5">
+                        Adiciona uma parcela extra de {formatCurrency(absDiff)} ao final.
+                      </p>
+                    </button>
+                  )}
+
+                  {/* Caso não haja nenhuma opção aplicável */}
+                  {!hasFuture && !isReduction && (
+                    <p className="text-slate-400 text-xs text-center py-2">
+                      Não há parcelas futuras para compensar. A alteração foi aplicada apenas nesta parcela.
+                    </p>
+                  )}
+                </div>
+                <div className="px-4 pb-4">
+                  <button
+                    onClick={() => setDiffModal(null)}
+                    className="w-full px-4 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 text-sm font-medium transition-all"
+                  >
+                    {(!hasFuture && !isReduction) ? 'Entendi' : 'Não fazer nada'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
       </main>
+
+      <AnimatePresence>
+        {deleteTarget && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setDeleteTarget(null)}
+            className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ type: 'spring', damping: 24, stiffness: 320 }}
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl"
+              style={{ background: 'linear-gradient(160deg, #1a1a1e 0%, #232328 100%)', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <div className="p-5 border-b border-white/5">
+                <h3 className="text-white font-bold text-base">Excluir lançamento parcelado</h3>
+                <p className="text-slate-400 text-xs mt-1">"{deleteTarget.description}" faz parte de um parcelamento. O que deseja excluir?</p>
+              </div>
+              <div className="p-4 space-y-2">
+                <button
+                  onClick={() => { finance.deleteTransaction(deleteTarget.id); setDeleteTarget(null); }}
+                  className="w-full text-left px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+                >
+                  <p className="text-white text-sm font-semibold">Apenas esta parcela</p>
+                  <p className="text-slate-400 text-[11px] mt-0.5">Remove só este mês, as demais continuam.</p>
+                </button>
+                <button
+                  onClick={() => { if (deleteTarget.installmentId) finance.deleteInstallmentGroup(deleteTarget.installmentId); setDeleteTarget(null); }}
+                  className="w-full text-left px-4 py-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-all"
+                >
+                  <p className="text-red-400 text-sm font-semibold">Todas as parcelas</p>
+                  <p className="text-red-400/70 text-[11px] mt-0.5">Remove o parcelamento inteiro ({deleteTarget.installmentTotal} parcelas).</p>
+                </button>
+              </div>
+              <div className="px-4 pb-4">
+                <button
+                  onClick={() => setDeleteTarget(null)}
+                  className="w-full px-4 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 text-sm font-medium transition-all"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {groupEditModal && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setGroupEditModal(null)}
+            className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ type: 'spring', damping: 24, stiffness: 320 }}
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl"
+              style={{ background: 'linear-gradient(160deg, #1a1a1e 0%, #232328 100%)', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <div className="p-5 border-b border-white/5">
+                <h3 className="text-white font-bold text-base">Editar parcelamento</h3>
+                <p className="text-slate-400 text-xs mt-1">
+                  Esta alteração ({groupEditModal.fields.description && 'descrição'}{groupEditModal.fields.description && groupEditModal.fields.category && ' e '}{groupEditModal.fields.category && 'categoria'}) pode valer para todas as parcelas. O que deseja?
+                </p>
+              </div>
+              <div className="p-4 space-y-2">
+                <button
+                  onClick={() => setGroupEditModal(null)}
+                  className="w-full text-left px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+                >
+                  <p className="text-white text-sm font-semibold">Apenas esta parcela</p>
+                  <p className="text-slate-400 text-[11px] mt-0.5">A mudança fica só neste mês.</p>
+                </button>
+                <button
+                  onClick={async () => {
+                    await finance.updateInstallmentGroupFields(groupEditModal.original.installmentId!, groupEditModal.fields);
+                    setGroupEditModal(null);
+                  }}
+                  className="w-full text-left px-4 py-3 rounded-xl bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 transition-all"
+                >
+                  <p className="text-green-400 text-sm font-semibold">Todas as parcelas</p>
+                  <p className="text-green-400/70 text-[11px] mt-0.5">Aplica a mudança em todo o parcelamento.</p>
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <FinanceAgent
         transactions={finance.transactions}
@@ -471,22 +690,23 @@ function TransactionForm({ onAdd, goals, transactions = [], savedAccounts = [], 
   };
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!description || !amount) return;
-    const baseAmount = parseFloat(amount);
-    const startDate = new Date(date + 'T12:00:00');
-    if (isInstallment && ['Necessidade', 'Desejo', 'Sonho'].includes(category)) {
-      const n = parseInt(numInstallments);
-      for (let i = 0; i < n; i++) {
-        const d = new Date(startDate); d.setMonth(startDate.getMonth() + i);
-        onAdd({ description: `${description} (${String(i + 1).padStart(2, '0')}/${String(n).padStart(2, '0')})`, amount: baseAmount / n, type, category, date: d.toISOString().split('T')[0], goalId: category === 'Sonho' ? goalId : undefined });
-      }
-    } else {
-      onAdd({ description, amount: baseAmount, type, category, date, goalId: category === 'Sonho' ? goalId : undefined });
+  e.preventDefault();
+  if (!description || !amount) return;
+  const baseAmount = parseFloat(amount);
+  const startDate = new Date(date + 'T12:00:00');
+  if (isInstallment && ['Necessidade', 'Desejo', 'Sonho'].includes(category)) {
+    const n = parseInt(numInstallments);
+    const installmentId = crypto.randomUUID();
+    for (let i = 0; i < n; i++) {
+      const d = new Date(startDate); d.setMonth(startDate.getMonth() + i);
+      onAdd({ description: `${description} (${String(i + 1).padStart(2, '0')}/${String(n).padStart(2, '0')})`, amount: baseAmount / n, type, category, date: d.toISOString().split('T')[0], goalId: category === 'Sonho' ? goalId : undefined, installmentId, installmentIndex: i + 1, installmentTotal: n });
     }
-    setDescription(''); setAmount(''); setGoalId(''); setIsInstallment(false);
-    setDate(new Date().toISOString().split('T')[0]);
-  };
+  } else {
+    onAdd({ description, amount: baseAmount, type, category, date, goalId: category === 'Sonho' ? goalId : undefined });
+  }
+  setDescription(''); setAmount(''); setGoalId(''); setIsInstallment(false);
+  setDate(new Date().toISOString().split('T')[0]);
+};
 
   return (
     <form onSubmit={handleSubmit} className="card-minimal">
