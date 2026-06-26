@@ -78,37 +78,84 @@ ${recentTransactions || 'Nenhuma transação registrada ainda.'}
 
 ━━━ COMO VOCÊ DEVE AGIR ━━━
 
+ESTILO E TOM:
 1. Sempre responda em português brasileiro, de forma clara e acessível
-2. Use os dados reais acima ao dar qualquer conselho — NUNCA invente números
-3. Seja empático, direto e motivador — como um coach financeiro de confiança
-4. Quando identificar gastos acima do ideal, aponte com gentileza e sugira onde cortar
-5. Celebre conquistas: saldo positivo, metas próximas de serem atingidas, categorias dentro do orçamento
-6. Respostas concisas: máximo 3 parágrafos por resposta
-7. Use emojis com moderação para deixar a conversa mais leve
-8. Se perguntado sobre um gasto específico, busque nas transações acima
-9. Quando sugerir metas, leve em conta a realidade dos números do usuário
-10. Nunca julgue os gastos do usuário — oriente com positividade`;
+2. Seja empática, direta e motivadora — como um coach financeiro de confiança
+3. Respostas concisas e bem organizadas. Use emojis com moderação
+4. Nunca julgue os gastos do usuário — oriente com positividade
+
+FORMATAÇÃO (use para deixar as respostas claras e escaneáveis):
+- Destaque valores, percentuais e pontos-chave com **negrito** (ex: **R$ 1.500,00**, **30%**)
+- Para agrupar tópicos, use um título curto numa linha começando com "### " (ex: "### Seus gastos")
+- Para listar itens, comece a linha com "- " (um item por linha)
+- Separe blocos de assunto com uma linha em branco
+- Mantenha parágrafos curtos (2-3 linhas). Evite blocos longos de texto corrido
+
+USO DOS DADOS:
+5. Use SEMPRE os dados reais acima ao dar qualquer conselho — NUNCA invente números
+6. Se perguntada sobre um gasto específico, busque nas transações acima
+7. Celebre conquistas reais: saldo positivo, metas próximas, categorias dentro do orçamento
+
+CONSELHOS ACIONÁVEIS:
+8. Ao identificar um problema (categoria acima do ideal, saldo negativo), não apenas aponte — sugira AÇÕES CONCRETAS baseadas nos números reais. Ex: "Você está R$ X acima no Desejo; cortar Y traria de volta ao ideal de 30%"
+9. Quando sugerir metas ou cortes, baseie-se na realidade dos números do usuário, com valores específicos
+
+EDUCAÇÃO FINANCEIRA E INVESTIMENTOS:
+10. Você PODE explicar conceitos financeiros de forma educativa: reserva de emergência, o que priorizar antes de investir, diferença entre renda fixa e variável, juros compostos, como funciona o método 50/30/20, etc.
+11. Você NÃO recomenda ativos, produtos ou investimentos específicos (não diga "compre tal ação/fundo/cripto"). Foque em educar o usuário para que ele decida — e tome decisões com um profissional
+12. Em temas de investimento ou decisões financeiras relevantes, inclua uma nota breve de que você é uma assistente educativa e não substitui um profissional certificado (consultor financeiro, CFP, etc.)
+
+ESCOPO:
+13. Seu foco é EXCLUSIVAMENTE as finanças do usuário e educação financeira. Se perguntarem sobre assuntos não relacionados (notícias, receitas, código, etc.), redirecione gentilmente: você é a assistente financeira do app Evok e está ali para ajudar com o dinheiro dele`;
 }
 
 // ── Render markdown bold ───────────────────────────────────────────────────
 
+function renderInline(text: string) {
+  return text.split(/(\*\*.*?\*\*)/g).map((part, pi) =>
+    part.startsWith('**') && part.endsWith('**') ? (
+      <strong key={pi} className="font-bold text-white">{part.slice(2, -2)}</strong>
+    ) : (
+      <span key={pi}>{part}</span>
+    )
+  );
+}
+
 function RenderMessage({ content }: { content: string }) {
   const lines = content.split('\n');
   return (
-    <span className="whitespace-pre-wrap">
-      {lines.map((line, li) => (
-        <span key={li}>
-          {line.split(/(\*\*.*?\*\*)/g).map((part, pi) =>
-            part.startsWith('**') && part.endsWith('**') ? (
-              <strong key={pi}>{part.slice(2, -2)}</strong>
-            ) : (
-              <span key={pi}>{part}</span>
-            )
-          )}
-          {li < lines.length - 1 && <br />}
-        </span>
-      ))}
-    </span>
+    <div className="space-y-1.5">
+      {lines.map((line, li) => {
+        const trimmed = line.trim();
+
+        // Título: linha começando com "### "
+        if (trimmed.startsWith('### ')) {
+          return (
+            <p key={li} className="font-bold text-finance-green text-[13px] mt-1">
+              {renderInline(trimmed.slice(4))}
+            </p>
+          );
+        }
+
+        // Bullet: linha começando com "- " ou "• "
+        if (trimmed.startsWith('- ') || trimmed.startsWith('• ')) {
+          return (
+            <div key={li} className="flex gap-2">
+              <span className="text-finance-green shrink-0">•</span>
+              <span className="flex-1">{renderInline(trimmed.slice(2))}</span>
+            </div>
+          );
+        }
+
+        // Linha vazia: espaço
+        if (trimmed === '') {
+          return <div key={li} className="h-1" />;
+        }
+
+        // Parágrafo normal
+        return <p key={li}>{renderInline(line)}</p>;
+      })}
+    </div>
   );
 }
 
@@ -188,11 +235,8 @@ export function FinanceAgent(props: FinanceAgentProps) {
       const requestBody = {
         system_instruction: { parts: [{ text: buildSystemPrompt(props) }] },
         contents: history,
-        generationConfig: { temperature: 0.75, maxOutputTokens: 600 },
+        generationConfig: { temperature: 0.75, maxOutputTokens: 1200 },
       };
-
-      console.log('Requesting:', API_URL);
-      console.log('Body:', JSON.stringify(requestBody, null, 2));
 
       const res = await fetch(API_URL, {
         method: 'POST',
@@ -202,7 +246,6 @@ export function FinanceAgent(props: FinanceAgentProps) {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        console.error('FULL ERROR RESPONSE:', JSON.stringify(errData, null, 2));
         throw new Error(`HTTP ${res.status}: ${errData?.error?.message ?? 'Unknown'}`);
       }
 
@@ -264,14 +307,14 @@ export function FinanceAgent(props: FinanceAgentProps) {
             >
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <div className="w-9 h-9 rounded-full bg-linear-to-br from-green-500 to-emerald-700 flex items-center justify-center shadow-lg">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center shadow-lg" style={{ background: 'linear-gradient(135deg, #22c55e, #15803d)' }}>
                     <Sparkles size={16} className="text-white" />
                   </div>
-                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-zinc-900" />
+                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-finance-green rounded-full border-2 border-zinc-900" />
                 </div>
                 <div>
                   <p className="text-white font-bold text-sm leading-none">Evok AI</p>
-                  <p className="text-green-400 text-[10px] tracking-widest uppercase font-semibold mt-0.5">
+                  <p className="text-finance-green text-[10px] tracking-widest uppercase font-semibold mt-0.5">
                     Assistente Financeira
                   </p>
                 </div>
@@ -298,7 +341,7 @@ export function FinanceAgent(props: FinanceAgentProps) {
                     className={`w-7 h-7 rounded-full shrink-0 flex items-center justify-center ${
                       msg.role === 'user'
                         ? 'bg-blue-600'
-                        : 'bg-linear-to-br from-green-500 to-emerald-700'
+                        : 'bg-[linear-gradient(135deg,#22c55e,#15803d)]'
                     }`}
                   >
                     {msg.role === 'user' ? <User size={13} className="text-white" /> : <Sparkles size={13} className="text-white" />}
@@ -325,7 +368,7 @@ export function FinanceAgent(props: FinanceAgentProps) {
               {/* Loading dots */}
               {isLoading && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-2">
-                  <div className="w-7 h-7 rounded-full bg-linear-to-br from-green-500 to-emerald-700 flex items-center justify-center shrink-0">
+                  <div className="w-7 h-7 rounded-full bg-[linear-gradient(135deg,#22c55e,#15803d)] flex items-center justify-center shrink-0">
                     <Sparkles size={13} className="text-white" />
                   </div>
                   <div
@@ -361,9 +404,9 @@ export function FinanceAgent(props: FinanceAgentProps) {
                       onMouseDown={() => sendMessage(label)}
                       className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-full font-medium transition-all hover:scale-105 active:scale-95"
                       style={{
-                        background: 'rgba(16, 185, 129, 0.12)',
-                        border: '1px solid rgba(16, 185, 129, 0.25)',
-                        color: '#34d399',
+                        background: 'rgba(34, 197, 94, 0.12)',
+                        border: '1px solid rgba(34, 197, 94, 0.25)',
+                        color: '#22c55e',
                       }}
                     >
                       {icon}
@@ -398,7 +441,7 @@ export function FinanceAgent(props: FinanceAgentProps) {
                   onClick={() => sendMessage()}
                   disabled={!input.trim() || isLoading}
                   className="w-7 h-7 rounded-lg flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:scale-110 active:scale-95"
-                  style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
+                  style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}
                 >
                   <Send size={13} className="text-white" />
                 </button>
@@ -422,7 +465,7 @@ export function FinanceAgent(props: FinanceAgentProps) {
         style={
           isOpen
             ? { background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)' }
-            : { background: 'linear-gradient(135deg, #10b981, #059669)', boxShadow: '0 4px 24px rgba(16,185,129,0.4)' }
+            : { background: 'linear-gradient(135deg, #22c55e, #16a34a)', boxShadow: '0 4px 24px rgba(34,197,94,0.4)' }
         }
         title="Evok AI — Assistente Financeira"
       >
