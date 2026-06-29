@@ -4,8 +4,9 @@ import { motion, AnimatePresence, useMotionValue, useTransform, animate } from '
 import { useFinance } from './useFinance';
 import { useAuth } from './useAuth';
 import { LoginPage } from './LoginPage';
-import { Transaction, TransactionCategory, TransactionType } from './types';
+import { Transaction, TransactionCategory, TransactionType, PaymentMethod, PAYMENT_METHODS } from './types';
 import { useSavedAccounts } from './useSavedAccounts';
+import { useRecurring } from './useRecurring';
 import { FinanceAgent } from './FinanceAgent';
 import { ResponsiveContainer, ComposedChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar, Line, PieChart, Pie, Cell } from 'recharts';
 
@@ -16,7 +17,7 @@ const formatCurrency = (val: number) => {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'transactions' | 'yearly' | 'goals'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'transactions' | 'yearly' | 'goals' | 'recurring'>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isEditingIncome, setIsEditingIncome] = useState(false);
   const [tempIncome, setTempIncome] = useState('');
@@ -28,9 +29,13 @@ export default function App() {
   const [editForm, setEditForm] = useState<Partial<Transaction>>({});
   const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null);
   const [diffModal, setDiffModal] = useState<{ original: Transaction; diff: number } | null>(null);
-  const [groupEditModal, setGroupEditModal] = useState<{ original: Transaction; fields: { description?: string; category?: TransactionCategory } } | null>(null);
+  const [groupEditModal, setGroupEditModal] = useState<{ original: Transaction; fields: { description?: string; category?: TransactionCategory; paymentMethod?: PaymentMethod } } | null>(null);
+  const [shiftModal, setShiftModal] = useState<{ original: Transaction; newDate: string } | null>(null);
+  const [addInstallmentsModal, setAddInstallmentsModal] = useState<Transaction | null>(null);
+  const [addCount, setAddCount] = useState('1');
   const finance = useFinance();
   const savedAccounts = useSavedAccounts();
+  const recurring = useRecurring();
   const { user, logout, loading } = useAuth();
 
   if (loading) {
@@ -63,7 +68,7 @@ const displayedIncome = (() => {
 
   const startEdit = (t: Transaction) => {
   setEditingId(t.id);
-  setEditForm({ description: t.description, amount: t.amount, date: t.date, category: t.category, type: t.type });
+  setEditForm({ description: t.description, amount: t.amount, date: t.date, category: t.category, type: t.type, paymentMethod: t.paymentMethod });
 };
 
   const saveEdit = async () => {
@@ -74,7 +79,16 @@ const displayedIncome = (() => {
     // Salva a edição da parcela individual primeiro
     await finance.updateTransaction(editingId, editForm);
 
+    
+
     if (original && original.installmentId) {
+      // 0) Mudança de DATA → modal de deslocamento (tem prioridade sobre valor)
+      if (editForm.date !== undefined && editForm.date !== original.date) {
+        setEditingId(null);
+        setShiftModal({ original, newDate: editForm.date });
+        return;
+      }
+
       // 1) Diferença de valor → modal de ajuste
       if (editForm.amount !== undefined) {
         const valueDiff = Math.round((original.amount - editForm.amount) * 100) / 100;
@@ -85,15 +99,18 @@ const displayedIncome = (() => {
         }
       }
 
-      // 2) Mudança de descrição/categoria → modal de propagação em grupo
-      const changedFields: { description?: string; category?: TransactionCategory } = {};
+      // 2) Mudança de descrição/categoria/forma de pagamento → modal de propagação em grupo
+      const changedFields: { description?: string; category?: TransactionCategory; paymentMethod?: PaymentMethod } = {};
       if (editForm.description !== undefined && editForm.description !== original.description) {
         changedFields.description = editForm.description;
       }
       if (editForm.category !== undefined && editForm.category !== original.category) {
         changedFields.category = editForm.category;
       }
-      if (changedFields.description || changedFields.category) {
+      if (editForm.paymentMethod !== undefined && editForm.paymentMethod !== original.paymentMethod) {
+        changedFields.paymentMethod = editForm.paymentMethod;
+      }
+      if (changedFields.description || changedFields.category || changedFields.paymentMethod) {
         setEditingId(null);
         setGroupEditModal({ original, fields: changedFields });
         return;
@@ -108,6 +125,71 @@ const displayedIncome = (() => {
       setDeleteTarget(t);
     } else {
       finance.deleteTransaction(t.id);
+    }
+  };
+
+  const handleToggleStatus = (t: Transaction) => {
+    const current = t.status ?? 'pago';
+    if (current === 'pago') {
+      finance.markAsPending(t.id);
+    } else {
+      finance.markAsPaid(t.id);
+    }
+  };
+
+  // Conta em quantos meses do ano atual um template já tem lançamento.
+  const countRecurringMonths = (templateId: string): number => {
+    const year = new Date().getFullYear();
+    const months = new Set<number>();
+    finance.transactions.forEach((t) => {
+      if (t.recurringId !== templateId) return;
+      const d = new Date(t.date + 'T12:00:00');
+      if (d.getFullYear() === year) months.add(d.getMonth());
+    });
+    return months.size;
+  };
+
+  // Gera o lançamento PENDENTE de um template nos 12 meses do ano atual (pula meses já existentes).
+  const generateRecurringYear = async (templateId: string) => {
+    const tpl = recurring.templates.find((t) => t.id === templateId);
+    if (!tpl) return;
+    const year = new Date().getFullYear();
+
+    for (let month = 0; month < 12; month++) {
+      const alreadyExists = finance.transactions.some((t) => {
+        if (t.recurringId !== tpl.id) return false;
+        const d = new Date(t.date + 'T12:00:00');
+        return d.getMonth() === month && d.getFullYear() === year;
+      });
+      if (alreadyExists) continue;
+
+      const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+      const day = Math.min(tpl.dueDay, lastDayOfMonth);
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+      await finance.addTransaction({
+        description: tpl.description,
+        amount: tpl.amount,
+        type: tpl.type,
+        category: tpl.category,
+        date: dateStr,
+        status: 'pendente',
+        recurringId: tpl.id,
+        paymentMethod: tpl.paymentMethod,
+      });
+    }
+  };
+
+  // Remove todos os lançamentos de um template no ano atual.
+  const removeRecurringYear = async (templateId: string) => {
+    const year = new Date().getFullYear();
+    const toRemove = finance.transactions.filter((t) => {
+      if (t.recurringId !== templateId) return false;
+      const d = new Date(t.date + 'T12:00:00');
+      return d.getFullYear() === year;
+    });
+    for (const t of toRemove) {
+      await finance.deleteTransaction(t.id);
     }
   };
 
@@ -133,6 +215,7 @@ const displayedIncome = (() => {
           <SidebarItem active={activeTab === 'transactions'} onClick={() => { setActiveTab('transactions'); setIsSidebarOpen(false); }} icon={<History size={18} />} label="Lançamentos" />
           <SidebarItem active={activeTab === 'yearly'} onClick={() => { setActiveTab('yearly'); setIsSidebarOpen(false); }} icon={<Calendar size={18} />} label="Consolidado Anual" />
           <SidebarItem active={activeTab === 'goals'} onClick={() => { setActiveTab('goals'); setIsSidebarOpen(false); }} icon={<Target size={18} />} label="Metas (Sonhos)" />
+          <SidebarItem active={activeTab === 'recurring'} onClick={() => { setActiveTab('recurring'); setIsSidebarOpen(false); }} icon={<History size={18} />} label="Recorrências" />
         </nav>
         <div className="p-6 mt-auto border-t border-black space-y-4">
           <div className="bg-evok-surface border border-finance-green/30 rounded-xl p-4 shadow-[0_0_20px_rgba(34,197,94,0.1)]">
@@ -150,13 +233,13 @@ const displayedIncome = (() => {
 
       {isSidebarOpen && <div onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-black/20 z-30 md:hidden backdrop-blur-sm" />}
 
-      <main className="flex-1 flex flex-col h-full overflow-y-auto p-4 md:p-8">
+      <main className="flex-1 flex flex-col h-full overflow-y-auto p-4 md:p-8 pb-24 md:pb-28">
         <header className="-mx-4 -mt-4 md:-mx-8 md:-mt-8">
           <div className="px-4 pt-12 pb-8 md:px-8 md:pt-12 md:pb-10" style={{ backgroundColor: '#0d0d10', backgroundImage: 'linear-gradient(to right, rgba(136,136,136,0.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(136,136,136,0.08) 1px, transparent 1px)', backgroundSize: '48px 48px' }}>
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <ShutterTitle
                 key={activeTab}
-                text={activeTab === 'dashboard' ? 'Visão Geral' : activeTab === 'transactions' ? 'Movimentações' : activeTab === 'yearly' ? 'Financeiro Anual' : 'Metas de Sonho'}
+                text={activeTab === 'dashboard' ? 'Visão Geral' : activeTab === 'transactions' ? 'Movimentações' : activeTab === 'yearly' ? 'Financeiro Anual' : activeTab === 'recurring' ? 'Recorrências' : 'Metas de Sonho'}
               />
               <div className="bg-finance-green/10 border border-finance-green/30 rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-[0_0_20px_rgba(34,197,94,0.08)] shrink-0">
                 <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-finance-green/15 text-finance-green shrink-0">
@@ -251,7 +334,7 @@ const displayedIncome = (() => {
                       </div>
                     );
                   })()}
-                  <div className="flex-1 p-2 sm:p-4">
+                  <div className="flex-1 p-2 sm:p-4 min-h-80">
                     {chartView === 'bars' && (
                     <ResponsiveContainer width="100%" height="100%">
                       <ComposedChart data={(() => {
@@ -359,6 +442,7 @@ const displayedIncome = (() => {
             <motion.div key="transactions" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} className="space-y-8">
               <TransactionForm
                 onAdd={finance.addTransaction}
+                onAddGoal={finance.addGoal}
                 goals={finance.goals}
                 transactions={finance.transactions}
                 savedAccounts={savedAccounts.savedAccounts}
@@ -396,6 +480,8 @@ const displayedIncome = (() => {
                       saveEdit={saveEdit}
                       setEditingId={setEditingId}
                       handleDeleteClick={handleDeleteClick}
+                      onToggleStatus={handleToggleStatus}
+                      onAddInstallments={(t) => { setAddInstallmentsModal(t); setAddCount('1'); }}
                       emptyMessage="Nenhum lançamento neste mês."
                     />
                   );
@@ -419,6 +505,8 @@ const displayedIncome = (() => {
                 saveEdit={saveEdit}
                 setEditingId={setEditingId}
                 handleDeleteClick={handleDeleteClick}
+                onToggleStatus={handleToggleStatus}
+                onAddInstallments={(t) => { setAddInstallmentsModal(t); setAddCount('1'); }}
               />
             </motion.div>
           )}
@@ -428,13 +516,26 @@ const displayedIncome = (() => {
               <GoalsManager goals={finance.goals} onAdd={finance.addGoal} onDelete={finance.deleteGoal} onUpdate={finance.updateGoal} dreamSavings={finance.expensesByCategory.Sonho} />
             </motion.div>
           )}
+
+          {activeTab === 'recurring' && (
+            <motion.div key="recurring" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <RecurringManager
+                templates={recurring.templates}
+                onAdd={recurring.addTemplate}
+                onDelete={recurring.deleteTemplate}
+                onGenerateYear={generateRecurringYear}
+                onRemoveYear={removeRecurringYear}
+                countMonths={countRecurringMonths}
+              />
+            </motion.div>
+          )}
         </AnimatePresence>
 
         <AnimatePresence>
         {diffModal && (() => {
           const { original, diff } = diffModal;
           const hasFuture = finance.transactions.some(
-            t => t.installmentId === original.installmentId && t.date > original.date
+            t => t.installmentId === original.installmentId && t.date > original.date && (t.status ?? 'pago') === 'pendente'
           );
           const isReduction = diff > 0; // sobrou valor (pagou menos)
           const absDiff = Math.abs(diff);
@@ -581,7 +682,7 @@ const displayedIncome = (() => {
               <div className="p-5 border-b border-white/5">
                 <h3 className="text-white font-bold text-base">Editar parcelamento</h3>
                 <p className="text-slate-400 text-xs mt-1">
-                  Esta alteração ({groupEditModal.fields.description && 'descrição'}{groupEditModal.fields.description && groupEditModal.fields.category && ' e '}{groupEditModal.fields.category && 'categoria'}) pode valer para todas as parcelas. O que deseja?
+                  Esta alteração pode valer para todas as parcelas. O que deseja?
                 </p>
               </div>
               <div className="p-4 space-y-2">
@@ -608,6 +709,101 @@ const displayedIncome = (() => {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {shiftModal && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setShiftModal(null)}
+            className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ type: 'spring', damping: 24, stiffness: 320 }}
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl"
+              style={{ background: 'linear-gradient(160deg, #1a1a1e 0%, #232328 100%)', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <div className="p-5 border-b border-white/5">
+                <h3 className="text-white font-bold text-base">Data alterada</h3>
+                <p className="text-slate-400 text-xs mt-1">Você mudou a data desta parcela. Deseja deslocar as parcelas seguintes (pendentes) mantendo o intervalo?</p>
+              </div>
+              <div className="p-4 space-y-2">
+                <button
+                  onClick={async () => {
+                    const o = shiftModal.original;
+                    await finance.shiftInstallmentsAfter(
+                      o.installmentId!,
+                      o.installmentIndex ?? 0,
+                      shiftModal.newDate,
+                      o.installmentInterval ?? 1
+                    );
+                    setShiftModal(null);
+                  }}
+                  className="w-full text-left px-4 py-3 rounded-xl bg-finance-green/10 hover:bg-finance-green/20 border border-finance-green/20 transition-all"
+                >
+                  <p className="text-finance-green text-sm font-semibold">Sim, deslocar as seguintes</p>
+                  <p className="text-finance-green/70 text-[11px] mt-0.5">As pendentes seguintes se reposicionam pelo intervalo. Pagas ficam fixas.</p>
+                </button>
+                <button
+                  onClick={() => setShiftModal(null)}
+                  className="w-full text-left px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+                >
+                  <p className="text-white text-sm font-semibold">Não, só esta parcela</p>
+                  <p className="text-slate-400 text-[11px] mt-0.5">As demais ficam onde estão.</p>
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {addInstallmentsModal && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setAddInstallmentsModal(null)}
+            className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ type: 'spring', damping: 24, stiffness: 320 }}
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl"
+              style={{ background: 'linear-gradient(160deg, #1a1a1e 0%, #232328 100%)', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <div className="p-5 border-b border-white/5">
+                <h3 className="text-white font-bold text-base">Adicionar parcelas</h3>
+                <p className="text-slate-400 text-xs mt-1">Quantas parcelas deseja adicionar? O valor restante será redistribuído entre as pendentes e as novas, mantendo o total.</p>
+              </div>
+              <div className="p-4 space-y-4">
+                <div className="flex items-center gap-3">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Quantidade</label>
+                  <input type="number" min="1" max="60" value={addCount} onChange={e => setAddCount(e.target.value)} className="w-20 bg-white/5 border border-white/10 text-white rounded px-3 py-1.5 text-sm outline-none focus:border-finance-green" />
+                </div>
+                <button
+                  onClick={async () => {
+                    const n = Math.max(1, parseInt(addCount) || 1);
+                    await finance.addInstallmentsToGroup(addInstallmentsModal.installmentId!, n);
+                    setAddInstallmentsModal(null);
+                  }}
+                  className="w-full px-4 py-3 rounded-xl bg-finance-green/10 hover:bg-finance-green/20 border border-finance-green/20 text-finance-green text-sm font-semibold transition-all"
+                >
+                  Adicionar {addCount} parcela{parseInt(addCount) === 1 ? '' : 's'}
+                </button>
+              </div>
+              <div className="px-4 pb-4">
+                <button
+                  onClick={() => setAddInstallmentsModal(null)}
+                  className="w-full px-4 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 text-sm font-medium transition-all"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <FinanceAgent
         transactions={finance.transactions}
         goals={finance.goals}
@@ -621,7 +817,127 @@ const displayedIncome = (() => {
   );
 }
 
-function MonthNavigator({ date, filterMode, onSelectDay, onSelectMonth }: { 
+function DatePicker({ value, onChange }: { value: string; onChange: (date: string) => void }) {
+  const monthsShort = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const weekDays = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+  const now = new Date();
+  const selected = value ? new Date(value + 'T12:00:00') : null;
+  const [isOpen, setIsOpen] = useState(false);
+  const [calYear, setCalYear] = useState((selected ?? now).getFullYear());
+  const [calMonth, setCalMonth] = useState((selected ?? now).getMonth());
+
+  const handleCalPrev = () => {
+    if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1); }
+    else setCalMonth(m => m - 1);
+  };
+  const handleCalNext = () => {
+    if (calMonth === 11) { setCalMonth(0); setCalYear(y => y + 1); }
+    else setCalMonth(m => m + 1);
+  };
+
+  const handleDayClick = (day: number) => {
+    const d = new Date(calYear, calMonth, day);
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    onChange(dateStr);
+    setIsOpen(false);
+  };
+
+  const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
+  const daysInMonth = getDaysInMonth(calYear, calMonth);
+  const firstDay = getFirstDayOfMonth(calYear, calMonth);
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  const blanks = Array.from({ length: firstDay }, (_, i) => i);
+
+  const label = selected
+    ? `${String(selected.getDate()).padStart(2, '0')}/${String(selected.getMonth() + 1).padStart(2, '0')}/${selected.getFullYear()}`
+    : 'Selecione...';
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => { setCalYear((selected ?? now).getFullYear()); setCalMonth((selected ?? now).getMonth()); setIsOpen(!isOpen); }}
+        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white outline-none hover:border-finance-green hover:bg-white/10 transition-colors cursor-pointer flex items-center gap-2"
+      >
+        <Calendar size={14} className="text-finance-green shrink-0" />
+        {label}
+      </button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+            <motion.div
+              initial={{ opacity: 0, y: 8, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              className="absolute left-0 top-12 z-50 rounded-2xl shadow-2xl overflow-hidden w-70"
+              style={{ background: 'linear-gradient(160deg, #1a1a1e 0%, #232328 100%)', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+                <button type="button" onClick={handleCalPrev} className="p-1.5 hover:bg-white/10 rounded-lg text-slate-300 hover:text-white transition-colors">
+                  <ChevronLeft size={14} />
+                </button>
+                <span className="text-white font-bold text-sm">{monthsShort[calMonth]} {calYear}</span>
+                <button type="button" onClick={handleCalNext} className="p-1.5 hover:bg-white/10 rounded-lg text-slate-300 hover:text-white transition-colors">
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-7 px-3 pt-3 pb-1">
+                {weekDays.map((d, i) => (
+                  <div key={i} className="text-center text-[10px] font-bold text-slate-500 uppercase py-1">{d}</div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-7 px-3 pb-3 gap-y-1">
+                {blanks.map((_, i) => <div key={`b-${i}`} />)}
+                {days.map(day => {
+                  const isSelectedDay = selected != null && day === selected.getDate() && calMonth === selected.getMonth() && calYear === selected.getFullYear();
+                  const isToday = day === now.getDate() && calMonth === now.getMonth() && calYear === now.getFullYear();
+                  return (
+                    <button
+                      type="button"
+                      key={day}
+                      onClick={() => handleDayClick(day)}
+                      className={`
+                        w-8 h-8 mx-auto rounded-full text-xs font-medium transition-all flex items-center justify-center
+                        ${isSelectedDay ? 'bg-finance-green text-white font-bold' : ''}
+                        ${isToday && !isSelectedDay ? 'border border-finance-green text-finance-green' : ''}
+                        ${!isSelectedDay && !isToday ? 'text-slate-300 hover:bg-white/10 hover:text-white' : ''}
+                      `}
+                    >
+                      {day}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="px-3 pb-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const t = new Date();
+                    const dateStr = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+                    onChange(dateStr);
+                    setIsOpen(false);
+                  }}
+                  className="w-full py-1.5 rounded-lg text-[11px] font-bold text-finance-green hover:bg-finance-green/10 transition-colors border border-finance-green/20"
+                >
+                  Hoje
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function MonthNavigator({ date, filterMode, onSelectDay, onSelectMonth }: {
   date: Date; 
   filterMode: 'day' | 'month';
   onSelectDay: (d: Date) => void; 
@@ -650,11 +966,6 @@ function MonthNavigator({ date, filterMode, onSelectDay, onSelectMonth }: {
     setIsOpen(false);
   };
 
-  const handleMonthClick = () => {
-    onSelectMonth(new Date(calYear, calMonth, 1));
-    setIsOpen(false);
-  };
-
   const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
   const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
   const daysInMonth = getDaysInMonth(calYear, calMonth);
@@ -666,14 +977,53 @@ function MonthNavigator({ date, filterMode, onSelectDay, onSelectMonth }: {
     ? `${String(date.getDate()).padStart(2, '0')} ${monthsShort[date.getMonth()]} ${date.getFullYear()}`
     : `${months[date.getMonth()]} ${date.getFullYear()}`;
 
+  const handleStep = (dir: -1 | 1) => {
+    const d = new Date(date);
+    if (filterMode === 'day') {
+      d.setDate(d.getDate() + dir);
+      onSelectDay(d);
+    } else {
+      d.setMonth(d.getMonth() + dir);
+      onSelectMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+    }
+  };
+
+  const handleToggleMode = () => {
+    const now = new Date();
+    if (filterMode === 'day') {
+      // Indo para MÊS: usa o mês onde o usuário está parado
+      onSelectMonth(new Date(date.getFullYear(), date.getMonth(), 1));
+    } else {
+      // Indo para DIA: mês atual → hoje; outro mês → dia 1
+      const isCurrentMonth = date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+      const targetDay = isCurrentMonth ? now : new Date(date.getFullYear(), date.getMonth(), 1);
+      onSelectDay(targetDay);
+    }
+    setIsOpen(false);
+  };
+
   return (
-    <div className="relative flex items-center gap-2">
+    <div className="relative flex items-center gap-1.5">
+      <button
+        onClick={() => handleStep(-1)}
+        title={filterMode === 'day' ? 'Dia anterior' : 'Mês anterior'}
+        className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:border-finance-green transition-colors active:scale-95">
+        <ChevronLeft size={16} />
+      </button>
+
       <button
         onClick={() => { setCalYear(date.getFullYear()); setCalMonth(date.getMonth()); setIsOpen(!isOpen); }}
         className="bg-white/5 border border-white/10 rounded-lg px-4 py-1.5 text-sm font-bold text-slate-200 outline-none hover:border-finance-green transition-colors cursor-pointer flex items-center gap-2">
       <Calendar size={14} className="text-finance-green" />
         {label}
     </button>
+
+      <button
+        onClick={() => handleStep(1)}
+        title={filterMode === 'day' ? 'Próximo dia' : 'Próximo mês'}
+        className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:border-finance-green transition-colors active:scale-95">
+        <ChevronRight size={16} />
+      </button>
 
       <AnimatePresence>
         {isOpen && (
@@ -738,10 +1088,10 @@ function MonthNavigator({ date, filterMode, onSelectDay, onSelectMonth }: {
                   Hoje
                 </button>
                 <button
-                  onClick={handleMonthClick}
+                  onClick={handleToggleMode}
                   className="flex-1 py-1.5 rounded-lg text-[11px] font-bold text-blue-400 hover:bg-blue-500/10 transition-colors border border-blue-500/20"
                 >
-                  Mês inteiro
+                  {filterMode === 'day' ? 'Mês inteiro' : 'Ver por dia'}
                 </button>
               </div>
             </motion.div>
@@ -761,6 +1111,8 @@ function TransactionList({
   saveEdit,
   setEditingId,
   handleDeleteClick,
+  onToggleStatus,
+  onAddInstallments,
   emptyMessage = 'Nenhum lançamento neste período.',
 }: {
   transactions: Transaction[];
@@ -771,29 +1123,55 @@ function TransactionList({
   saveEdit: () => void;
   setEditingId: (id: string | null) => void;
   handleDeleteClick: (t: Transaction) => void;
+  onToggleStatus: (t: Transaction) => void;
+  onAddInstallments: (t: Transaction) => void;
   emptyMessage?: string;
 }) {
+  const StatusBadge = ({ t }: { t: Transaction }) => {
+    const isPaid = (t.status ?? 'pago') === 'pago';
+    return (
+      <button
+        onClick={() => onToggleStatus(t)}
+        title={isPaid ? 'Pago — clique para marcar como pendente' : 'Pendente — clique para marcar como pago'}
+        className={`px-2 py-1 rounded text-[10px] uppercase tracking-wider font-bold transition-all active:scale-95 ${
+          isPaid
+            ? 'bg-finance-green/15 text-finance-green hover:bg-finance-green/25'
+            : 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25'
+        }`}
+      >
+        {isPaid ? 'Pago' : 'Pendente'}
+      </button>
+    );
+  };
+
   return (
     <>
       <div className="hidden md:block overflow-x-hidden">
         <table className="w-full text-left">
           <thead className="bg-white/3">
             <tr className="text-[10px] uppercase font-bold text-slate-400">
-              <th className="px-6 py-4">Data</th><th className="px-6 py-4">Descrição</th><th className="px-6 py-4">Categoria</th><th className="px-6 py-4 text-right">Valor</th><th className="px-6 py-4 text-center">Ações</th>
+              <th className="px-6 py-4">Data</th><th className="px-6 py-4">Descrição</th><th className="px-6 py-4">Categoria</th><th className="px-6 py-4">Pagamento</th><th className="px-6 py-4 text-right">Valor</th><th className="px-6 py-4 text-center">Status</th><th className="px-6 py-4 text-center">Ações</th>
             </tr>
           </thead>
           <tbody className="text-sm">
             {transactions.map(t => (
               editingId === t.id ? (
                 <tr key={t.id} className="border-t border-white/5 bg-white/3">
-                  <td className="px-3 py-2"><input type="date" value={editForm.date} disabled={!!t.installmentId} onChange={e => setEditForm({ ...editForm, date: e.target.value })} title={t.installmentId ? 'A data de parcelas não pode ser alterada' : ''} className={`bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none focus:border-finance-green w-full ${t.installmentId ? 'opacity-40 cursor-not-allowed' : ''}`} /></td>
+                  <td className="px-3 py-2"><DatePicker value={editForm.date ?? ''} onChange={d => setEditForm({ ...editForm, date: d })} /></td>
                   <td className="px-3 py-2"><input type="text" value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none focus:border-finance-green w-full" /></td>
                   <td className="px-3 py-2">
                     <select value={editForm.category} onChange={e => setEditForm({ ...editForm, category: e.target.value as TransactionCategory })} className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none focus:border-finance-green">
                       <option value="Necessidade">Necessidade</option><option value="Desejo">Desejo</option><option value="Sonho">Sonho</option><option value="Extra">Extra</option><option value="Salário">Salário</option>
                     </select>
                   </td>
+                  <td className="px-3 py-2">
+                    <select value={editForm.paymentMethod ?? ''} onChange={e => setEditForm({ ...editForm, paymentMethod: (e.target.value || undefined) as PaymentMethod | undefined })} className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none focus:border-finance-green">
+                      <option value="">—</option>
+                      {PAYMENT_METHODS.map(pm => <option key={pm} value={pm}>{pm}</option>)}
+                    </select>
+                  </td>
                   <td className="px-3 py-2"><input type="number" step="0.01" value={editForm.amount} onChange={e => setEditForm({ ...editForm, amount: parseFloat(e.target.value) })} className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none focus:border-finance-green w-full text-right" /></td>
+                  <td className="px-3 py-2 text-center"><StatusBadge t={t} /></td>
                   <td className="px-3 py-2 text-center">
                     <div className="flex items-center justify-center gap-2">
                       <button onClick={saveEdit} className="p-1.5 text-slate-400 hover:text-finance-green transition-colors" title="Salvar"><Check size={16} /></button>
@@ -806,10 +1184,13 @@ function TransactionList({
                   <td className="px-6 py-4 text-slate-400 font-mono text-xs group-hover:text-white transition-colors">{new Date(t.date + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
                   <td className="px-6 py-4 font-medium text-slate-200 group-hover:text-white transition-all group-hover:translate-x-1">{t.description}</td>
                   <td className="px-6 py-4"><CategoryBadge category={t.category} isType={t.type === 'Entrada' ? 'Entrada' : undefined} /></td>
+                  <td className="px-6 py-4 text-xs text-slate-400">{t.paymentMethod || <span className="text-slate-600 italic">—</span>}</td>
                   <td className={`px-6 py-4 text-right font-bold transition-all ${t.type === 'Entrada' ? 'text-blue-300 group-hover:text-blue-200' : 'text-red-300 group-hover:text-red-200'}`}>{t.type === 'Entrada' ? '+' : '-'} {formatCurrency(t.amount)}</td>
+                  <td className="px-6 py-4 text-center"><StatusBadge t={t} /></td>
                   <td className="px-6 py-4 text-center">
                     <div className="flex items-center justify-center gap-3">
                       <button onClick={() => startEdit(t)} className="p-1 hover:text-finance-green text-slate-400 transition-colors" title="Editar"><Pencil size={15} /></button>
+                      {t.installmentId && <button onClick={() => onAddInstallments(t)} className="p-1 hover:text-finance-green text-slate-400 transition-colors" title="Adicionar parcelas"><Plus size={15} /></button>}
                       <button onClick={() => handleDeleteClick(t)} className="p-1 hover:text-finance-red text-slate-400 transition-colors" title="Excluir"><Trash2 size={15} /></button>
                     </div>
                   </td>
@@ -825,11 +1206,12 @@ function TransactionList({
           editingId === t.id ? (
             <div key={t.id} className="p-4 bg-white/5 space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase font-bold">Data {t.installmentId && <span className="text-slate-500 normal-case">(travada)</span>}</label><input type="date" value={editForm.date} disabled={!!t.installmentId} onChange={e => setEditForm({ ...editForm, date: e.target.value })} className={`w-full bg-white/10 border border-white/20 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-finance-green ${t.installmentId ? 'opacity-40 cursor-not-allowed' : ''}`} /></div>
+                <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase font-bold">Data</label><DatePicker value={editForm.date ?? ''} onChange={d => setEditForm({ ...editForm, date: d })} /></div>
                 <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase font-bold">Valor</label><input type="number" step="0.01" value={editForm.amount} onChange={e => setEditForm({ ...editForm, amount: parseFloat(e.target.value) })} className="w-full bg-white/10 border border-white/20 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-finance-green" /></div>
               </div>
               <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase font-bold">Descrição</label><input type="text" value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} className="w-full bg-white/10 border border-white/20 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-finance-green" /></div>
               <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase font-bold">Categoria</label><select value={editForm.category} onChange={e => setEditForm({ ...editForm, category: e.target.value as TransactionCategory })} className="w-full bg-white/10 border border-white/20 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-finance-green"><option value="Necessidade">Necessidade</option><option value="Desejo">Desejo</option><option value="Sonho">Sonho</option><option value="Extra">Extra</option><option value="Salário">Salário</option></select></div>
+              <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase font-bold">Forma de Pagamento</label><select value={editForm.paymentMethod ?? ''} onChange={e => setEditForm({ ...editForm, paymentMethod: (e.target.value || undefined) as PaymentMethod | undefined })} className="w-full bg-white/10 border border-white/20 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-finance-green"><option value="">—</option>{PAYMENT_METHODS.map(pm => <option key={pm} value={pm}>{pm}</option>)}</select></div>
               <div className="flex gap-2 pt-1">
                 <button onClick={saveEdit} className="flex-1 py-1.5 bg-finance-green text-white text-xs font-bold rounded flex items-center justify-center gap-1"><Check size={14} /> Salvar</button>
                 <button onClick={() => setEditingId(null)} className="flex-1 py-1.5 bg-white/10 text-slate-200 text-xs font-bold rounded hover:bg-white/15 transition-colors">Cancelar</button>
@@ -843,12 +1225,15 @@ function TransactionList({
                   <div className="flex flex-wrap gap-2 items-center">
                     <span className="text-[10px] font-mono text-slate-400">{new Date(t.date + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
                     <CategoryBadge category={t.category} isType={t.type === 'Entrada' ? 'Entrada' : undefined} />
+                    <StatusBadge t={t} />
+                    {t.paymentMethod && <span className="text-[10px] text-slate-400 bg-white/5 px-2 py-1 rounded">{t.paymentMethod}</span>}
                   </div>
                 </div>
                 <div className="text-right flex flex-col items-end gap-2">
                   <span className={`text-sm font-bold whitespace-nowrap ${t.type === 'Entrada' ? 'text-blue-300' : 'text-red-300'}`}>{t.type === 'Entrada' ? '+' : '-'} {formatCurrency(t.amount)}</span>
                   <div className="flex gap-2">
                     <button onClick={() => startEdit(t)} className="p-1.5 bg-white/5 text-slate-300 rounded-md hover:text-finance-green transition-colors"><Pencil size={13} /></button>
+                    {t.installmentId && <button onClick={() => onAddInstallments(t)} className="p-1.5 bg-white/5 text-slate-300 rounded-md hover:text-finance-green transition-colors"><Plus size={13} /></button>}
                     <button onClick={() => handleDeleteClick(t)} className="p-1.5 bg-white/5 text-slate-300 rounded-md hover:text-finance-red transition-colors"><Trash2 size={13} /></button>
                   </div>
                 </div>
@@ -956,8 +1341,8 @@ function CategoryBadge({ category, isType }: { category: string; isType?: string
   return <span className={`${styles[isType || category] || 'bg-white/10 text-slate-300'} px-2 py-1 rounded text-[10px] uppercase tracking-wider font-medium`}>{isType || category}</span>;
 }
 
-function TransactionForm({ onAdd, goals, transactions = [], savedAccounts = [], onSaveAccount, onDeleteSavedAccount }: {
-  onAdd: (t: any) => void; goals: any[]; transactions?: any[]; savedAccounts?: any[];
+function TransactionForm({ onAdd, onAddGoal, goals, transactions = [], savedAccounts = [], onSaveAccount, onDeleteSavedAccount }: {
+  onAdd: (t: any) => void; onAddGoal: (g: any) => Promise<string | null>; goals: any[]; transactions?: any[]; savedAccounts?: any[];
   onSaveAccount?: (a: any) => void; onDeleteSavedAccount?: (id: string) => void;
 }) {
   const [description, setDescription] = useState('');
@@ -966,9 +1351,14 @@ function TransactionForm({ onAdd, goals, transactions = [], savedAccounts = [], 
   const [category, setCategory] = useState<TransactionCategory>('Necessidade');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [goalId, setGoalId] = useState<string>('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | ''>('');
   const [isInstallment, setIsInstallment] = useState(false);
   const [numInstallments, setNumInstallments] = useState('2');
+  const [installmentInterval, setInstallmentInterval] = useState('1');
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [firstPaidModal, setFirstPaidModal] = useState(false);
+  const [dreamGoalModal, setDreamGoalModal] = useState(false);
+  const [dreamGoalName, setDreamGoalName] = useState('');
 
   useEffect(() => {
     if (type === 'Entrada') { setCategory('Extra'); setIsInstallment(false); }
@@ -997,24 +1387,76 @@ function TransactionForm({ onAdd, goals, transactions = [], savedAccounts = [], 
     else { if (onSaveAccount) onSaveAccount({ description, amount: parseFloat(amount) || 0, category, type }); }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!description || !amount) return;
-  const baseAmount = parseFloat(amount);
-  const startDate = new Date(date + 'T12:00:00');
-  if (isInstallment && ['Necessidade', 'Desejo', 'Sonho'].includes(category)) {
+  const resetForm = () => {
+    setDescription(''); setAmount(''); setGoalId(''); setIsInstallment(false);
+    setInstallmentInterval('1');
+    setPaymentMethod('');
+    setDate(new Date().toISOString().split('T')[0]);
+  };
+
+  // Cria as N parcelas. firstPaid define se a 1ª nasce paga; as demais sempre pendentes.
+  const commitInstallments = async (firstPaid: boolean) => {
+    const baseAmount = parseFloat(amount);
+    const startDate = new Date(date + 'T12:00:00');
     const n = parseInt(numInstallments);
+    const interval = Math.max(1, parseInt(installmentInterval) || 1);
     const installmentId = crypto.randomUUID();
-    for (let i = 0; i < n; i++) {
-      const d = new Date(startDate); d.setMonth(startDate.getMonth() + i);
-      onAdd({ description: `${description} (${String(i + 1).padStart(2, '0')}/${String(n).padStart(2, '0')})`, amount: baseAmount / n, type, category, date: d.toISOString().split('T')[0], goalId: category === 'Sonho' ? goalId : undefined, installmentId, installmentIndex: i + 1, installmentTotal: n });
+
+    // Sonho parcelado: cria a meta automaticamente (alvo = valor total) e vincula as parcelas a ela.
+    let effectiveGoalId = category === 'Sonho' ? goalId : undefined;
+    if (category === 'Sonho' && dreamGoalName.trim()) {
+      const newGoalId = await onAddGoal({ name: dreamGoalName.trim(), targetAmount: baseAmount, currentAmount: 0, autoCreated: true });
+      if (newGoalId) effectiveGoalId = newGoalId;
     }
-  } else {
-    onAdd({ description, amount: baseAmount, type, category, date, goalId: category === 'Sonho' ? goalId : undefined });
-  }
-  setDescription(''); setAmount(''); setGoalId(''); setIsInstallment(false);
-  setDate(new Date().toISOString().split('T')[0]);
-};
+
+    for (let i = 0; i < n; i++) {
+      const d = new Date(startDate); d.setMonth(startDate.getMonth() + i * interval);
+      const parcelDate = d.toISOString().split('T')[0];
+      const status = i === 0 ? (firstPaid ? 'pago' : 'pendente') : undefined;
+      await onAdd({
+        description: `${description} (${String(i + 1).padStart(2, '0')}/${String(n).padStart(2, '0')})`,
+        amount: baseAmount / n, type, category, date: parcelDate,
+        goalId: effectiveGoalId,
+        installmentId, installmentIndex: i + 1, installmentTotal: n,
+        installmentInterval: interval,
+        status,
+        paymentMethod: paymentMethod || undefined,
+      });
+    }
+    setFirstPaidModal(false);
+    setDreamGoalModal(false);
+    setDreamGoalName('');
+    resetForm();
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!description || !amount) return;
+    if (!paymentMethod) { alert('Selecione a forma de pagamento.'); return; }
+    const baseAmount = parseFloat(amount);
+    const isParcelado = isInstallment && ['Necessidade', 'Desejo', 'Sonho'].includes(category);
+
+    if (isParcelado) {
+      // Sonho parcelado → primeiro pede o nome da meta (cria meta automática)
+      if (category === 'Sonho') {
+        setDreamGoalName(description);
+        setDreamGoalModal(true);
+        return;
+      }
+      const today = new Date().toISOString().split('T')[0];
+      // Começa hoje ou antes → pergunta se a 1ª já foi paga. Começa no futuro → cria direto (todas pendentes).
+      if (date <= today) {
+        setFirstPaidModal(true);
+      } else {
+        commitInstallments(false);
+      }
+      return;
+    }
+
+    // Lançamento simples: addTransaction decide o status pela data
+    onAdd({ description, amount: baseAmount, type, category, date, goalId: category === 'Sonho' ? goalId : undefined, paymentMethod: paymentMethod || undefined });
+    resetForm();
+  };
 
   return (
     <form onSubmit={handleSubmit} className="card-minimal">
@@ -1058,13 +1500,21 @@ function TransactionForm({ onAdd, goals, transactions = [], savedAccounts = [], 
 
         <div className="space-y-2">
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Data</label>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-4 py-2.5 text-sm outline-none focus:border-finance-green focus:bg-white/10 transition-all cursor-pointer" />
+          <DatePicker value={date} onChange={setDate} />
         </div>
 
         <div className="space-y-2">
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Categoria</label>
           <select value={category} onChange={e => setCategory(e.target.value as any)} disabled={type === 'Entrada'} className={`w-full bg-white/5 border border-white/10 text-white rounded-lg px-4 py-2.5 text-sm outline-none focus:border-finance-green transition-all ${type === 'Entrada' ? 'opacity-60 cursor-not-allowed' : 'hover:bg-white/10 cursor-pointer'}`}>
             {type === 'Entrada' ? <option value="Extra">Extra</option> : (<><option value="Necessidade">Necessidade (50%)</option><option value="Desejo">Desejo (30%)</option><option value="Sonho">Sonho (20%)</option></>)}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Forma de Pagamento</label>
+          <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as PaymentMethod | '')} className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-4 py-2.5 text-sm outline-none focus:border-finance-green hover:bg-white/10 transition-all cursor-pointer">
+            <option value="">Selecione...</option>
+            {PAYMENT_METHODS.map(pm => <option key={pm} value={pm}>{pm}</option>)}
           </select>
         </div>
 
@@ -1100,14 +1550,123 @@ function TransactionForm({ onAdd, goals, transactions = [], savedAccounts = [], 
             <span className="text-sm font-medium text-slate-300 group-hover:text-slate-400 transition-colors">Compra Parcelada?</span>
           </label>
           {isInstallment && (
-            <div className="flex items-center gap-3 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 flex-wrap animate-in zoom-in-95 duration-200">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nº de Parcelas</label>
               <input type="number" min="2" max="72" value={numInstallments} onChange={e => setNumInstallments(e.target.value)} className="w-16 bg-white/5 border border-white/10 text-white rounded px-3 py-1 text-sm outline-none focus:border-finance-green" />
-              <span className="text-xs text-slate-400 italic">(Serão gerados {numInstallments} lançamentos mensais)</span>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Intervalo (meses)</label>
+              <input type="number" min="1" max="12" value={installmentInterval} onChange={e => setInstallmentInterval(e.target.value)} className="w-16 bg-white/5 border border-white/10 text-white rounded px-3 py-1 text-sm outline-none focus:border-finance-green" />
+              <span className="text-xs text-slate-400 italic">
+                ({numInstallments} parcelas a cada {installmentInterval} {parseInt(installmentInterval) === 1 ? 'mês' : 'meses'})
+              </span>
             </div>
           )}
         </div>
       )}
+
+      <AnimatePresence>
+        {firstPaidModal && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setFirstPaidModal(false)}
+            className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ type: 'spring', damping: 24, stiffness: 320 }}
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl"
+              style={{ background: 'linear-gradient(160deg, #1a1a1e 0%, #232328 100%)', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <div className="p-5 border-b border-white/5">
+                <h3 className="text-white font-bold text-base">Primeira parcela</h3>
+                <p className="text-slate-400 text-xs mt-1">A primeira parcela já foi paga? As demais ficarão como pendentes até você confirmar cada uma.</p>
+              </div>
+              <div className="p-4 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => commitInstallments(true)}
+                  className="w-full text-left px-4 py-3 rounded-xl bg-finance-green/10 hover:bg-finance-green/20 border border-finance-green/20 transition-all"
+                >
+                  <p className="text-finance-green text-sm font-semibold">Sim, já paguei</p>
+                  <p className="text-finance-green/70 text-[11px] mt-0.5">A 1ª parcela nasce como paga.</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => commitInstallments(false)}
+                  className="w-full text-left px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all"
+                >
+                  <p className="text-white text-sm font-semibold">Ainda não</p>
+                  <p className="text-slate-400 text-[11px] mt-0.5">Todas nascem pendentes.</p>
+                </button>
+              </div>
+              <div className="px-4 pb-4">
+                <button
+                  type="button"
+                  onClick={() => setFirstPaidModal(false)}
+                  className="w-full px-4 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 text-sm font-medium transition-all"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {dreamGoalModal && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setDreamGoalModal(false)}
+            className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ type: 'spring', damping: 24, stiffness: 320 }}
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl"
+              style={{ background: 'linear-gradient(160deg, #1a1a1e 0%, #232328 100%)', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <div className="p-5 border-b border-white/5">
+                <h3 className="text-white font-bold text-base">Criar meta de sonho</h3>
+                <p className="text-slate-400 text-xs mt-1">Esse parcelamento vai gerar uma meta. A meta enche conforme você marca cada parcela como paga.</p>
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nome da meta</label>
+                  <input autoFocus type="text" value={dreamGoalName} onChange={e => setDreamGoalName(e.target.value)} className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-4 py-2.5 text-sm outline-none focus:border-finance-green" placeholder="Ex: Viagem para o Japão" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!dreamGoalName.trim()) return;
+                    const today = new Date().toISOString().split('T')[0];
+                    if (date <= today) {
+                      setDreamGoalModal(false);
+                      setTimeout(() => setFirstPaidModal(true), 50);
+                    } else {
+                      setDreamGoalModal(false);
+                      commitInstallments(false);
+                    }
+                  }}
+                  className="w-full px-4 py-3 rounded-xl bg-finance-green/10 hover:bg-finance-green/20 border border-finance-green/20 text-finance-green text-sm font-semibold transition-all"
+                >
+                  Continuar
+                </button>
+              </div>
+              <div className="px-4 pb-4">
+                <button
+                  type="button"
+                  onClick={() => setDreamGoalModal(false)}
+                  className="w-full px-4 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 text-sm font-medium transition-all"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </form>
   );
 }
@@ -1199,7 +1758,7 @@ function YearSelector({ year, onChange }: { year: number; onChange: (y: number) 
   );
 }
 
-function YearlyManager({ transactions, onAddTransaction, onDeleteTransaction, goals, editingId, editForm, setEditForm, startEdit, saveEdit, setEditingId, handleDeleteClick }: {
+function YearlyManager({ transactions, onAddTransaction, onDeleteTransaction, goals, editingId, editForm, setEditForm, startEdit, saveEdit, setEditingId, handleDeleteClick, onToggleStatus, onAddInstallments }: {
   transactions: any[]; onAddTransaction: any; onDeleteTransaction: any; goals: any[];
   editingId: string | null;
   editForm: Partial<Transaction>;
@@ -1208,6 +1767,8 @@ function YearlyManager({ transactions, onAddTransaction, onDeleteTransaction, go
   saveEdit: () => void;
   setEditingId: (id: string | null) => void;
   handleDeleteClick: (t: Transaction) => void;
+  onToggleStatus: (t: Transaction) => void;
+  onAddInstallments: (t: Transaction) => void;
 }) {
   const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
   const currentYear = new Date().getFullYear();
@@ -1254,6 +1815,8 @@ function YearlyManager({ transactions, onAddTransaction, onDeleteTransaction, go
           saveEdit={saveEdit}
           setEditingId={setEditingId}
           handleDeleteClick={handleDeleteClick}
+          onToggleStatus={onToggleStatus}
+          onAddInstallments={onAddInstallments}
           emptyMessage="Nenhum lançamento registrado ainda."
         />
       </div>
@@ -1295,6 +1858,8 @@ function YearlyManager({ transactions, onAddTransaction, onDeleteTransaction, go
           saveEdit={saveEdit}
           setEditingId={setEditingId}
           handleDeleteClick={handleDeleteClick}
+          onToggleStatus={onToggleStatus}
+          onAddInstallments={onAddInstallments}
           emptyMessage="Nenhum lançamento encontrado para este mês."
         />
       </div>
@@ -1353,6 +1918,7 @@ function YearlyManager({ transactions, onAddTransaction, onDeleteTransaction, go
 function GoalsManager({ goals, onAdd, onDelete, onUpdate, dreamSavings }: { goals: any[]; onAdd: any; onDelete: any; onUpdate: any; dreamSavings: number }) {
   const [name, setName] = useState('');
   const [targetAmount, setTargetAmount] = useState('');
+  const [deleteGoalTarget, setDeleteGoalTarget] = useState<any | null>(null);
   const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); if (!name || !targetAmount) return; onAdd({ name, targetAmount: parseFloat(targetAmount), currentAmount: 0 }); setName(''); setTargetAmount(''); };
   return (
     <div className="space-y-8">
@@ -1371,7 +1937,7 @@ function GoalsManager({ goals, onAdd, onDelete, onUpdate, dreamSavings }: { goal
             <div key={goal.id} className="card-minimal flex flex-col gap-6">
               <div className="flex justify-between items-start">
                 <div><h3 className="font-bold text-lg text-white">{goal.name}</h3><p className="text-xs text-slate-400">Total acumulado: {formatCurrency(goal.currentAmount)}</p></div>
-                <button onClick={() => onDelete(goal.id)} className="p-1 text-slate-400 hover:text-finance-red transition-colors"><Trash2 size={18} /></button>
+                <button onClick={() => setDeleteGoalTarget(goal)} className="p-1 text-slate-400 hover:text-finance-red transition-colors"><Trash2 size={18} /></button>
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between text-xs font-bold text-slate-400 uppercase tracking-widest"><span>Progresso</span><span className="text-slate-200 font-bold">{progress.toFixed(0)}%</span></div>
@@ -1384,6 +1950,217 @@ function GoalsManager({ goals, onAdd, onDelete, onUpdate, dreamSavings }: { goal
         })}
       </div>
       {goals.length === 0 && <p className="text-center py-20 text-slate-400 italic">Planeje seus sonhos!</p>}
+
+      <AnimatePresence>
+        {deleteGoalTarget && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setDeleteGoalTarget(null)}
+            className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ type: 'spring', damping: 24, stiffness: 320 }}
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl"
+              style={{ background: 'linear-gradient(160deg, #1a1a1e 0%, #232328 100%)', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <div className="p-5 border-b border-white/5">
+                <h3 className="text-white font-bold text-base">Excluir meta</h3>
+                <p className="text-slate-400 text-xs mt-1">Tem certeza que deseja excluir a meta "{deleteGoalTarget.name}"? Esta ação não pode ser desfeita.</p>
+              </div>
+              <div className="p-4 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => { onDelete(deleteGoalTarget.id); setDeleteGoalTarget(null); }}
+                  className="w-full px-4 py-3 rounded-xl bg-finance-red/10 hover:bg-finance-red/20 border border-finance-red/20 text-finance-red text-sm font-semibold transition-all"
+                >
+                  Sim, excluir
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleteGoalTarget(null)}
+                  className="w-full px-4 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 text-sm font-medium transition-all"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function RecurringManager({ templates, onAdd, onDelete, onGenerateYear, onRemoveYear, countMonths }: {
+  templates: any[];
+  onAdd: (t: any) => void;
+  onDelete: (id: string) => void;
+  onGenerateYear: (id: string) => Promise<void>;
+  onRemoveYear: (id: string) => Promise<void>;
+  countMonths: (id: string) => number;
+}) {
+  const [description, setDescription] = useState('');
+  const [amount, setAmount] = useState('');
+  const [type, setType] = useState<TransactionType>('Saída');
+  const [category, setCategory] = useState<TransactionCategory>('Necessidade');
+  const [dueDay, setDueDay] = useState('5');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | ''>('');
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+
+  useEffect(() => {
+    if (type === 'Entrada') setCategory('Extra');
+    else if (category === 'Extra' || category === 'Salário') setCategory('Necessidade');
+  }, [type, category]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!description || !amount) return;
+    if (!paymentMethod) { alert('Selecione a forma de pagamento.'); return; }
+    const day = Math.min(31, Math.max(1, parseInt(dueDay) || 1));
+    onAdd({ description, amount: parseFloat(amount), type, category, dueDay: day, active: true, paymentMethod: paymentMethod || undefined });
+    setDescription(''); setAmount(''); setDueDay('5'); setPaymentMethod('');
+  };
+
+  return (
+    <div className="space-y-8">
+      <form onSubmit={handleSubmit} className="card-minimal">
+        <h3 className="font-bold mb-6 text-white">Nova Conta Recorrente</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-7 gap-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Descrição</label>
+            <input type="text" value={description} onChange={e => setDescription(e.target.value)} className="w-full bg-white/5 border border-white/10 text-white placeholder:text-slate-500 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-finance-green" placeholder="Ex: Aluguel" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Forma de Pagamento</label>
+            <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as PaymentMethod | '')} className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-4 py-2.5 text-sm outline-none focus:border-finance-green cursor-pointer">
+              <option value="">Selecione...</option>
+              {PAYMENT_METHODS.map(pm => <option key={pm} value={pm}>{pm}</option>)}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Valor</label>
+            <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-white/5 border border-white/10 text-white placeholder:text-slate-500 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-finance-green" placeholder="R$ 0,00" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Dia do Vencimento</label>
+            <input type="number" min="1" max="31" value={dueDay} onChange={e => setDueDay(e.target.value)} className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-4 py-2.5 text-sm outline-none focus:border-finance-green" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Categoria</label>
+            <select value={category} onChange={e => setCategory(e.target.value as any)} disabled={type === 'Entrada'} className={`w-full bg-white/5 border border-white/10 text-white rounded-lg px-4 py-2.5 text-sm outline-none focus:border-finance-green ${type === 'Entrada' ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
+              {type === 'Entrada' ? <option value="Extra">Extra</option> : (<><option value="Necessidade">Necessidade</option><option value="Desejo">Desejo</option><option value="Sonho">Sonho</option></>)}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tipo</label>
+            <div className="flex bg-white/5 border border-white/10 p-1 rounded-lg h-10.5">
+              <button type="button" onClick={() => setType('Entrada')} className={`flex-1 rounded-md text-[10px] font-bold transition-all ${type === 'Entrada' ? 'bg-finance-green/20 text-finance-green' : 'text-slate-400 hover:text-slate-200'}`}>ENTRADA</button>
+              <button type="button" onClick={() => setType('Saída')} className={`flex-1 rounded-md text-[10px] font-bold transition-all ${type === 'Saída' ? 'bg-finance-red/20 text-finance-red' : 'text-slate-400 hover:text-slate-200'}`}>SAÍDA</button>
+            </div>
+          </div>
+          <div className="flex items-end">
+            <button type="submit" className="w-full h-10.5 flex items-center justify-center gap-2 border border-finance-green text-finance-green rounded-lg text-sm font-semibold hover:bg-finance-green/10 transition-colors active:scale-[0.98]"><Plus size={18} /> Adicionar</button>
+          </div>
+        </div>
+      </form>
+
+      <div className="card-minimal px-0 py-0 overflow-hidden">
+        <div className="p-6 border-b border-slate-50">
+          <h3 className="font-bold text-white">Contas Recorrentes</h3>
+          <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Lance a conta em todos os meses do ano</p>
+        </div>
+        {templates.length === 0 ? (
+          <div className="py-20 flex flex-col items-center justify-center text-slate-400">
+            <History size={40} className="mb-4 opacity-20" />
+            <p className="italic">Nenhuma conta recorrente cadastrada.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-white/5">
+            {templates.map(t => (
+              <div key={t.id} className="p-4 flex items-center justify-between gap-4 hover:bg-white/5 transition-colors">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-semibold text-slate-200">{t.description}</h4>
+                    <CategoryBadge category={t.category} isType={t.type === 'Entrada' ? 'Entrada' : undefined} />
+                    {!t.active && <span className="text-[10px] text-slate-500 uppercase font-bold">(inativa)</span>}
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Todo dia {t.dueDay} • {formatCurrency(t.amount)}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {(() => {
+                    const allMonths = countMonths(t.id) >= 12;
+                    return allMonths ? (
+                      <button
+                        type="button"
+                        onClick={() => onRemoveYear(t.id)}
+                        title="Remover esta conta de todos os meses do ano"
+                        className="text-[10px] font-bold uppercase px-2 py-1 rounded bg-finance-red/15 text-finance-red hover:bg-finance-red/25 transition-all"
+                      >
+                        Remover dos meses
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onGenerateYear(t.id)}
+                        title="Lançar esta conta em todos os meses do ano"
+                        className="text-[10px] font-bold uppercase px-2 py-1 rounded bg-blue-500/15 text-blue-300 hover:bg-blue-500/25 transition-all"
+                      >
+                        Lançar nos meses
+                      </button>
+                    );
+                  })()}
+                  <button onClick={() => setDeleteTarget(t)} className="p-1 text-slate-400 hover:text-finance-red transition-colors"><Trash2 size={16} /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <AnimatePresence>
+        {deleteTarget && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setDeleteTarget(null)}
+            className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ type: 'spring', damping: 24, stiffness: 320 }}
+              onClick={e => e.stopPropagation()}
+              className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl"
+              style={{ background: 'linear-gradient(160deg, #1a1a1e 0%, #232328 100%)', border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <div className="p-5 border-b border-white/5">
+                <h3 className="text-white font-bold text-base">Excluir conta recorrente</h3>
+                <p className="text-slate-400 text-xs mt-1">Excluir "{deleteTarget.description}" também removerá todos os lançamentos gerados por ela neste ano. Esta ação não pode ser desfeita.</p>
+              </div>
+              <div className="p-4 space-y-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await onRemoveYear(deleteTarget.id);
+                    await onDelete(deleteTarget.id);
+                    setDeleteTarget(null);
+                  }}
+                  className="w-full px-4 py-3 rounded-xl bg-finance-red/10 hover:bg-finance-red/20 border border-finance-red/20 text-finance-red text-sm font-semibold transition-all"
+                >
+                  Sim, excluir tudo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleteTarget(null)}
+                  className="w-full px-4 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 text-sm font-medium transition-all"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

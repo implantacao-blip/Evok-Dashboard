@@ -14,7 +14,7 @@ function ShutterTitle({ text }: { text: string }) {
             initial={{ opacity: 0, filter: "blur(10px)", y: 8 }}
             animate={{ opacity: 1, filter: "blur(0px)", y: 0 }}
             transition={{ delay: i * 0.04 + 0.3, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-            className="text-4xl lg:text-5xl font-extrabold text-white tracking-tight inline-block"
+            className="text-2xl sm:text-3xl lg:text-5xl font-extrabold text-white tracking-tight inline-block"
           >
             {char === " " ? "\u00A0" : char}
           </motion.span>
@@ -22,7 +22,7 @@ function ShutterTitle({ text }: { text: string }) {
             initial={{ x: "-110%" }}
             animate={{ x: "120%" }}
             transition={{ duration: 0.7, delay: i * 0.04, ease: "easeInOut" }}
-            className="absolute inset-0 text-4xl lg:text-5xl font-extrabold text-finance-green tracking-tight pointer-events-none"
+            className="absolute inset-0 text-2xl sm:text-3xl lg:text-5xl font-extrabold text-finance-green tracking-tight pointer-events-none"
             style={{ clipPath: "polygon(0 0, 100% 0, 100% 50%, 0 50%)" }}
           >
             {char === " " ? "\u00A0" : char}
@@ -31,7 +31,7 @@ function ShutterTitle({ text }: { text: string }) {
             initial={{ x: "110%" }}
             animate={{ x: "-120%" }}
             transition={{ duration: 0.7, delay: i * 0.04 + 0.15, ease: "easeInOut" }}
-            className="absolute inset-0 text-4xl lg:text-5xl font-extrabold text-white tracking-tight pointer-events-none"
+            className="absolute inset-0 text-2xl sm:text-3xl lg:text-5xl font-extrabold text-white tracking-tight pointer-events-none"
             style={{ clipPath: "polygon(0 50%, 100% 50%, 100% 100%, 0 100%)" }}
           >
             {char === " " ? "\u00A0" : char}
