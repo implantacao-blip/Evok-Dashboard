@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
 import { useAuth } from './useAuth';
-import { Mail, Lock, LogOut, Key, CheckCircle, PieChart, Target, Calendar, ShieldCheck } from 'lucide-react';
+import { Mail, Lock, LogOut, Key, CheckCircle, PieChart, Target, Calendar, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import evokLogo from './assets/evokmif_logo0.png';
 
 function ShutterTitle({ text }: { text: string }) {
@@ -46,6 +46,7 @@ export function LoginPage() {
   const { login, signup, logout, user } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isSignup, setIsSignup] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -170,14 +171,22 @@ const handleSubmit = async (e: React.FormEvent) => {
                 <div className="relative">
                   <Lock className="absolute left-3 top-3 text-zinc-500" size={20} />
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full bg-white/5 text-white placeholder:text-slate-500 pl-10 pr-4 py-3 rounded-lg border border-white/10 focus:border-finance-green focus:outline-none transition"
+                    className="w-full bg-white/5 text-white placeholder:text-slate-500 pl-10 pr-12 py-3 rounded-lg border border-white/10 focus:border-finance-green focus:outline-none transition"
                     required
                     minLength={6}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-3 text-zinc-500 hover:text-zinc-300 transition"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
                 </div>
               </div>
 

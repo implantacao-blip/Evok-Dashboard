@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, Target, LayoutDashboard, History, Calendar, Menu, X, Pencil, ArrowLeft, ChevronRight, ChevronLeft, Check, LogOut, Star, Wallet } from 'lucide-react';
 import { motion, AnimatePresence, useMotionValue, useTransform, animate } from 'motion/react';
 import { useFinance } from './useFinance';
@@ -14,6 +14,12 @@ import evokLogo from './assets/evokmif_logo0.png';
 
 const formatCurrency = (val: number) => {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+};
+
+// Formata dígitos crus como moeda estilo maquininha (ex: "1245600" -> "12.456,00")
+const formatCentsToBRL = (digits: string) => {
+  const cents = parseInt(digits || '0', 10);
+  return (cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 export default function App() {
@@ -59,9 +65,9 @@ const displayedIncome = (() => {
 })();
 
   const handleIncomeSubmit = () => {
-    if (tempIncome !== '' && !isNaN(parseFloat(tempIncome))) {
+    if (tempIncome !== '') {
       const targetDate = activeTab === 'transactions' ? historyDate : new Date();
-      finance.updateMonthlyIncome(parseFloat(tempIncome), targetDate);
+      finance.updateMonthlyIncome(parseInt(tempIncome || '0', 10) / 100, targetDate);
     }
     setIsEditingIncome(false);
   };
@@ -250,8 +256,9 @@ const displayedIncome = (() => {
                   {isEditingIncome ? (
                     <div className="flex items-center gap-1 animate-in fade-in">
                       <span className="text-finance-green text-sm font-bold">R$</span>
-                      <input autoFocus type="number" value={tempIncome}
-                        onChange={(e) => setTempIncome(e.target.value)}
+                      <input autoFocus type="text" inputMode="numeric"
+                        value={tempIncome ? formatCentsToBRL(tempIncome) : ''}
+                        onChange={(e) => setTempIncome(e.target.value.replace(/\D/g, ''))}
                         onKeyDown={(e) => { if (e.key === 'Enter') handleIncomeSubmit(); if (e.key === 'Escape') setIsEditingIncome(false); }}
                         onBlur={handleIncomeSubmit}
                         className="w-24 bg-white/10 border border-white/20 rounded px-2 py-0.5 outline-none focus:border-finance-green text-white font-bold text-sm" />
@@ -259,7 +266,7 @@ const displayedIncome = (() => {
                   ) : (
                     <div className="flex items-center gap-2">
                       <span className="text-finance-green font-bold text-lg leading-none">{formatCurrency(displayedIncome)}</span>
-                      <button onClick={() => { setTempIncome(displayedIncome.toString()); setIsEditingIncome(true); }}
+                      <button onClick={() => { setTempIncome(String(Math.round(displayedIncome * 100))); setIsEditingIncome(true); }}
                         className="p-0.5 hover:bg-white/10 rounded transition-colors text-white/50 hover:text-white active:scale-95" title="Editar renda mensal">
                         <Pencil size={13} />
                       </button>
@@ -826,6 +833,19 @@ function DatePicker({ value, onChange }: { value: string; onChange: (date: strin
   const [calYear, setCalYear] = useState((selected ?? now).getFullYear());
   const [calMonth, setCalMonth] = useState((selected ?? now).getMonth());
 
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+
+  const openCalendar = () => {
+    if (btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setCoords({ top: r.bottom + 8, left: r.left });
+    }
+    setCalYear((selected ?? now).getFullYear());
+    setCalMonth((selected ?? now).getMonth());
+    setIsOpen(!isOpen);
+  };
+
   const handleCalPrev = () => {
     if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1); }
     else setCalMonth(m => m - 1);
@@ -856,8 +876,9 @@ function DatePicker({ value, onChange }: { value: string; onChange: (date: strin
   return (
     <div className="relative">
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => { setCalYear((selected ?? now).getFullYear()); setCalMonth((selected ?? now).getMonth()); setIsOpen(!isOpen); }}
+        onClick={openCalendar}
         className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white outline-none hover:border-finance-green hover:bg-white/10 transition-colors cursor-pointer flex items-center gap-2"
       >
         <Calendar size={14} className="text-finance-green shrink-0" />
@@ -873,8 +894,8 @@ function DatePicker({ value, onChange }: { value: string; onChange: (date: strin
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 8, scale: 0.95 }}
               transition={{ duration: 0.15 }}
-              className="absolute left-0 top-12 z-50 rounded-2xl shadow-2xl overflow-hidden w-70"
-              style={{ background: 'linear-gradient(160deg, #1a1a1e 0%, #232328 100%)', border: '1px solid rgba(255,255,255,0.08)' }}
+              className="fixed z-50 rounded-2xl shadow-2xl overflow-hidden w-70"
+              style={{ top: coords.top, left: coords.left, background: 'linear-gradient(160deg, #1a1a1e 0%, #232328 100%)', border: '1px solid rgba(255,255,255,0.08)' }}
             >
               <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
                 <button type="button" onClick={handleCalPrev} className="p-1.5 hover:bg-white/10 rounded-lg text-slate-300 hover:text-white transition-colors">
@@ -1170,7 +1191,7 @@ function TransactionList({
                       {PAYMENT_METHODS.map(pm => <option key={pm} value={pm}>{pm}</option>)}
                     </select>
                   </td>
-                  <td className="px-3 py-2"><input type="number" step="0.01" value={editForm.amount} onChange={e => setEditForm({ ...editForm, amount: parseFloat(e.target.value) })} className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none focus:border-finance-green w-full text-right" /></td>
+                  <td className="px-3 py-2"><input type="text" inputMode="numeric" value={editForm.amount != null ? formatCentsToBRL(String(Math.round(editForm.amount * 100))) : ''} onChange={e => setEditForm({ ...editForm, amount: parseInt(e.target.value.replace(/\D/g, '') || '0', 10) / 100 })} className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none focus:border-finance-green w-full text-right" /></td>
                   <td className="px-3 py-2 text-center"><StatusBadge t={t} /></td>
                   <td className="px-3 py-2 text-center">
                     <div className="flex items-center justify-center gap-2">
@@ -1207,7 +1228,7 @@ function TransactionList({
             <div key={t.id} className="p-4 bg-white/5 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase font-bold">Data</label><DatePicker value={editForm.date ?? ''} onChange={d => setEditForm({ ...editForm, date: d })} /></div>
-                <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase font-bold">Valor</label><input type="number" step="0.01" value={editForm.amount} onChange={e => setEditForm({ ...editForm, amount: parseFloat(e.target.value) })} className="w-full bg-white/10 border border-white/20 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-finance-green" /></div>
+                <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase font-bold">Valor</label><input type="text" inputMode="numeric" value={editForm.amount != null ? formatCentsToBRL(String(Math.round(editForm.amount * 100))) : ''} onChange={e => setEditForm({ ...editForm, amount: parseInt(e.target.value.replace(/\D/g, '') || '0', 10) / 100 })} className="w-full bg-white/10 border border-white/20 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-finance-green" /></div>
               </div>
               <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase font-bold">Descrição</label><input type="text" value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} className="w-full bg-white/10 border border-white/20 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-finance-green" /></div>
               <div className="space-y-1"><label className="text-[9px] text-slate-400 uppercase font-bold">Categoria</label><select value={editForm.category} onChange={e => setEditForm({ ...editForm, category: e.target.value as TransactionCategory })} className="w-full bg-white/10 border border-white/20 rounded px-2 py-1.5 text-xs text-white outline-none focus:border-finance-green"><option value="Necessidade">Necessidade</option><option value="Desejo">Desejo</option><option value="Sonho">Sonho</option><option value="Extra">Extra</option><option value="Salário">Salário</option></select></div>
@@ -1377,14 +1398,14 @@ function TransactionForm({ onAdd, onAddGoal, goals, transactions = [], savedAcco
 
   const applySelection = (s: any) => {
     setDescription(s.description);
-    if (s.isFavorite) { if (s.amount) setAmount(s.amount.toString()); if (s.category) setCategory(s.category); if (s.type) setType(s.type); }
+    if (s.isFavorite) { if (s.amount) setAmount(String(Math.round(s.amount * 100))); if (s.category) setCategory(s.category); if (s.type) setType(s.type); }
     setShowSuggestions(false);
   };
 
   const toggleFavorite = () => {
     if (!description) return;
     if (isFavorited) { const acc = savedAccounts.find((s: any) => s.description.toLowerCase() === description.toLowerCase()); if (acc && onDeleteSavedAccount) onDeleteSavedAccount(acc.id); }
-    else { if (onSaveAccount) onSaveAccount({ description, amount: parseFloat(amount) || 0, category, type }); }
+    else { if (onSaveAccount) onSaveAccount({ description, amount: parseInt(amount || '0', 10) / 100, category, type }); }
   };
 
   const resetForm = () => {
@@ -1396,7 +1417,7 @@ function TransactionForm({ onAdd, onAddGoal, goals, transactions = [], savedAcco
 
   // Cria as N parcelas. firstPaid define se a 1ª nasce paga; as demais sempre pendentes.
   const commitInstallments = async (firstPaid: boolean) => {
-    const baseAmount = parseFloat(amount);
+    const baseAmount = parseInt(amount || '0', 10) / 100;
     const startDate = new Date(date + 'T12:00:00');
     const n = parseInt(numInstallments);
     const interval = Math.max(1, parseInt(installmentInterval) || 1);
@@ -1433,7 +1454,7 @@ function TransactionForm({ onAdd, onAddGoal, goals, transactions = [], savedAcco
     e.preventDefault();
     if (!description || !amount) return;
     if (!paymentMethod) { alert('Selecione a forma de pagamento.'); return; }
-    const baseAmount = parseFloat(amount);
+    const baseAmount = parseInt(amount || '0', 10) / 100;
     const isParcelado = isInstallment && ['Necessidade', 'Desejo', 'Sonho'].includes(category);
 
     if (isParcelado) {
@@ -1495,7 +1516,17 @@ function TransactionForm({ onAdd, onAddGoal, goals, transactions = [], savedAcco
 
         <div className="space-y-2">
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Valor</label>
-          <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-white/5 border border-white/10 text-white placeholder:text-slate-500 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-finance-green focus:bg-white/10 transition-all" placeholder="R$ 0,00" />
+          <div className="relative">
+            <span className="absolute left-4 top-2.5 text-sm text-slate-400 pointer-events-none">R$</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={amount ? formatCentsToBRL(amount) : ''}
+              onChange={e => setAmount(e.target.value.replace(/\D/g, ''))}
+              className="w-full bg-white/5 border border-white/10 text-white placeholder:text-slate-500 rounded-lg pl-10 pr-4 py-2.5 text-sm outline-none focus:border-finance-green focus:bg-white/10 transition-all"
+              placeholder="0,00"
+            />
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -1919,14 +1950,14 @@ function GoalsManager({ goals, onAdd, onDelete, onUpdate, dreamSavings }: { goal
   const [name, setName] = useState('');
   const [targetAmount, setTargetAmount] = useState('');
   const [deleteGoalTarget, setDeleteGoalTarget] = useState<any | null>(null);
-  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); if (!name || !targetAmount) return; onAdd({ name, targetAmount: parseFloat(targetAmount), currentAmount: 0 }); setName(''); setTargetAmount(''); };
+  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); if (!name || !targetAmount) return; onAdd({ name, targetAmount: parseInt(targetAmount || '0', 10) / 100, currentAmount: 0 }); setName(''); setTargetAmount(''); };
   return (
     <div className="space-y-8">
       <form onSubmit={handleSubmit} className="card-minimal">
         <h3 className="font-bold mb-4 text-white">Nova Meta de Sonho</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="space-y-2"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nome do Sonho</label><input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full bg-white/5 border border-white/10 text-white placeholder:text-slate-500 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-finance-green focus:bg-white/10" placeholder="Ex: Viagem para o Japão" /></div>
-          <div className="space-y-2"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Valor Objetivo</label><input type="number" value={targetAmount} onChange={e => setTargetAmount(e.target.value)} className="w-full bg-white/5 border border-white/10 text-white placeholder:text-slate-500 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-finance-green focus:bg-white/10" placeholder="R$ 0,00" /></div>
+          <div className="space-y-2"><label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Valor Objetivo</label><div className="relative"><span className="absolute left-4 top-2.5 text-sm text-slate-400 pointer-events-none">R$</span><input type="text" inputMode="numeric" value={targetAmount ? formatCentsToBRL(targetAmount) : ''} onChange={e => setTargetAmount(e.target.value.replace(/\D/g, ''))} className="w-full bg-white/5 border border-white/10 text-white placeholder:text-slate-500 rounded-lg pl-10 pr-4 py-2.5 text-sm outline-none focus:border-finance-green focus:bg-white/10" placeholder="0,00" /></div></div>
           <div className="flex items-end"><button type="submit" className="w-full h-10.5 border border-finance-green text-finance-green rounded-lg text-sm font-semibold hover:bg-finance-green/10 transition-colors active:scale-[0.98]">Criar Meta</button></div>
         </div>
       </form>
@@ -2019,7 +2050,7 @@ function RecurringManager({ templates, onAdd, onDelete, onGenerateYear, onRemove
     if (!description || !amount) return;
     if (!paymentMethod) { alert('Selecione a forma de pagamento.'); return; }
     const day = Math.min(31, Math.max(1, parseInt(dueDay) || 1));
-    onAdd({ description, amount: parseFloat(amount), type, category, dueDay: day, active: true, paymentMethod: paymentMethod || undefined });
+    onAdd({ description, amount: parseInt(amount || '0', 10) / 100, type, category, dueDay: day, active: true, paymentMethod: paymentMethod || undefined });
     setDescription(''); setAmount(''); setDueDay('5'); setPaymentMethod('');
   };
 
@@ -2041,7 +2072,7 @@ function RecurringManager({ templates, onAdd, onDelete, onGenerateYear, onRemove
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Valor</label>
-            <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-white/5 border border-white/10 text-white placeholder:text-slate-500 rounded-lg px-4 py-2.5 text-sm outline-none focus:border-finance-green" placeholder="R$ 0,00" />
+            <div className="relative"><span className="absolute left-4 top-2.5 text-sm text-slate-400 pointer-events-none">R$</span><input type="text" inputMode="numeric" value={amount ? formatCentsToBRL(amount) : ''} onChange={e => setAmount(e.target.value.replace(/\D/g, ''))} className="w-full bg-white/5 border border-white/10 text-white placeholder:text-slate-500 rounded-lg pl-10 pr-4 py-2.5 text-sm outline-none focus:border-finance-green" placeholder="0,00" /></div>
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Dia do Vencimento</label>
